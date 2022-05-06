@@ -20,7 +20,7 @@ const (
 	negativeSig = '-'
 )
 
-func String2Bytes(val string) []byte {
+func String2Bytes(val string, expireAt uint64) []byte {
 	var data []byte
 	var typ uint8
 	switch val {
@@ -47,33 +47,40 @@ func String2Bytes(val string) []byte {
 			data = bytesBuffer.Bytes()
 		}
 	}
-	setData := make([]byte, len(data)+1)
+	setData := make([]byte, len(data)+1+8)
 	setData[0] = typ
-	copy(setData[1:], data)
+
+	expireAtBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(expireAtBuf, expireAt)
+
+	copy(setData[1:9], expireAtBuf)
+	copy(setData[9:], data)
 	return setData
 }
-func Bytes2String(data []byte) string {
+func Bytes2String(data []byte) (expireAt uint64, s string) {
 	var size = len(data)
-	if size < 2 {
-		return ""
+	if size < 2+8 {
+		return 0, ""
 	}
 	switch data[0] {
 	case BoolType:
-		if data[1] == 1 {
-			return "true"
+		if data[9] == 1 {
+			s = "true"
 		}
-		return "false"
+		s = "false"
 	case IntType:
 		var i int64
-		binary.Read(bytes.NewBuffer(data[1:]), binary.BigEndian, &i)
-		return strconv.FormatInt(i, 10)
+		binary.Read(bytes.NewBuffer(data[9:]), binary.BigEndian, &i)
+		s = strconv.FormatInt(i, 10)
 	case FloatType:
 		var f float64
-		binary.Read(bytes.NewBuffer(data[1:]), binary.BigEndian, &f)
-		return strconv.FormatFloat(f, 'f', -1, 64)
+		binary.Read(bytes.NewBuffer(data[9:]), binary.BigEndian, &f)
+		s = strconv.FormatFloat(f, 'f', -1, 64)
 	default:
-		return string(data[1:])
+		s = string(data[9:])
 	}
+	expireAt = binary.BigEndian.Uint64(data[1:9])
+	return
 }
 func getValType(val string) uint8 {
 	var size = len(val)

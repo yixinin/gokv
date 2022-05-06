@@ -2,7 +2,9 @@ package gokv
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yixinin/gokv/storage"
 )
@@ -48,23 +50,23 @@ func readFields(hkval []byte) []string {
 		}
 		i++
 	}
+	if prev < i {
+		fields = append(fields, string(hkval[prev:i]))
+	}
 	return fields
 }
-func genFields(fields []string) []byte {
+func genFields(key string, fields []string) []byte {
 	s := []byte(strings.Join(fields, ","))
-	var data = make([]byte, 2, 2+len(s))
-	data[0] = 'h'
-	data[1] = ':'
-	data = append(data, s...)
-	return data
+	val := fmt.Sprintf("h:%s:%s", key, s)
+	return []byte(val)
 }
 
-type hashImpl struct {
-	db storage.Storage
+type _hashImpl struct {
+	_db storage.Storage
 }
 
-func (h *hashImpl) hCheckKey(ctx context.Context, key []byte) error {
-	hkval, err := h.db.Get(ctx, key)
+func (h *_hashImpl) hCheckKey(ctx context.Context, key []byte) error {
+	hkval, err := h._db.Get(ctx, key)
 	switch err {
 	case nil:
 		if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
@@ -84,9 +86,9 @@ func (h *hashImpl) hCheckKey(ctx context.Context, key []byte) error {
 	}
 }
 
-func (h *hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) error {
+func (h *_hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) error {
 	var bKey = []byte(key)
-	hkval, err := h.db.Get(ctx, bKey)
+	hkval, err := h._db.Get(ctx, bKey)
 	switch err {
 	case nil:
 		if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
@@ -98,50 +100,133 @@ func (h *hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) er
 		if !sliceEq(hkval[2:2+len(key)], bKey) {
 			return ErrKeyOPType
 		}
-		fields := readFields(hkval[2:])
+		fields := readFields(hkval[2+len(key)+1:])
 		for _, f := range fields {
 			if f == field {
 				return nil
 			}
 		}
 		fields = append(fields, field)
-		return h.db.Set(ctx, bKey, genFields(fields))
+		return h._db.Set(ctx, bKey, genFields(key, fields))
 	case ErrNotfound:
-		val := make([]byte, len(key)+len(field)+1)
-		copy(val[:len(key)], key)
-		val[len(key)] = HashKeySplitC
-		copy(val[len(key)+1:], field)
-		return h.db.Set(ctx, bKey, val)
+		val := genFields(key, []string{field})
+		return h._db.Set(ctx, bKey, val)
 	default:
 		return err
 	}
 }
 
-func genHashFieldKey(key, field string) []byte {
-	fkey := make([]byte, 2+len(key)+len(field)+1)
-	fkey[0] = 'h'
-	fkey[1] = ':'
-	copy(fkey[:len(key)], key)
-	fkey[len(key)] = SplitC
-	copy(fkey[len(key)+1:], field)
-	return fkey
+func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([][]byte, error) {
+	var bKey = []byte(key)
+	hkval, err := h._db.Get(ctx, bKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
+		return nil, ErrKeyOPType
+	}
+	if hkval[0] != 'h' || hkval[1] != ':' {
+		return nil, ErrKeyOPType
+	}
+	if !sliceEq(hkval[2:2+len(key)], bKey) {
+		return nil, ErrKeyOPType
+	}
+	fields := readFields(hkval[2+len(key)+1:])
+	var keys = make([][]byte, 0, len(fields))
+	for _, f := range fields {
+		keys = append(keys, genHashFieldKey(key, f))
+	}
+	return keys, nil
 }
-func (h *hashImpl) HSet(ctx context.Context, key, field, val string) error {
+
+func genHashFieldKey(key, field string) []byte {
+	fkey := fmt.Sprintf("h:%s:%s", key, field)
+	return []byte(fkey)
+}
+func (h *_hashImpl) HSet(ctx context.Context, key, field, val string) error {
 	if err := h.hCheckKeyForUpdate(ctx, key, field); err != nil {
 		return err
 	}
 	fkey := genHashFieldKey(key, field)
-	return h.db.Set(ctx, fkey, storage.String2Bytes(val))
+	return h._db.Set(ctx, fkey, storage.String2Bytes(val, 0))
 }
 
-func (h *hashImpl) HGet(ctx context.Context, key, field string) (string, error) {
+func (h *_hashImpl) HGet(ctx context.Context, key, field string) (string, error) {
+
 	if err := h.hCheckKey(ctx, []byte(key)); err != nil {
 		return "", err
 	}
 	fkey := genHashFieldKey(key, field)
-	data, err := h.db.Get(ctx, fkey)
+	data, err := h._db.Get(ctx, fkey)
 	if err != nil {
 		return "", err
 	}
-	return storage.Bytes2String(data), nil
+	expireAt, s := storage.Bytes2String(data)
+	if err := h.checkExpire(ctx, key, expireAt); err != nil {
+		return "", err
+	}
+	return s, nil
+}
+func (h *_hashImpl) checkExpire(ctx context.Context, key string, expireAt uint64) error {
+	var unixNow = uint64(time.Now().Unix())
+	if expireAt != 0 && expireAt <= unixNow {
+		go func(ctx context.Context) {
+			defer recover()
+			keys, _ := h.hGetAllKeys(ctx, key)
+			for _, k := range keys {
+				_ = h._db.Delete(ctx, k)
+			}
+			_ = h._db.Delete(ctx, []byte(key))
+		}(context.Background())
+		return ErrNotfound
+	}
+	return nil
+}
+
+func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	keys, err := h.hGetAllKeys(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	var m = make(map[string]string, len(key))
+	var newKeys = make([]string, 0, len(keys))
+	for _, key := range keys {
+		data, err := h._db.Get(ctx, key)
+		if err == ErrNotfound {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		_, m[string(key)] = storage.Bytes2String(data)
+		newKeys = append(newKeys, string(key))
+	}
+	if len(newKeys) < len(keys) {
+		_ = h._db.Set(ctx, []byte(key), genFields(key, newKeys))
+	}
+	return m, nil
+}
+
+func (h *_hashImpl) HDel(ctx context.Context, key string, field ...string) error {
+	keys, err := h.hGetAllKeys(ctx, key)
+	if err != nil {
+		return err
+	}
+	var waitDeletes = make(map[string]struct{}, len(keys))
+	for _, f := range field {
+		waitDeletes[string(genHashFieldKey(key, f))] = struct{}{}
+	}
+	var newKeys = make([]string, 0, len(keys))
+	for _, key := range keys {
+		if _, ok := waitDeletes[string(key)]; ok {
+			_ = h._db.Delete(ctx, key)
+			continue
+		}
+		newKeys = append(newKeys, string(key))
+	}
+	if len(newKeys) < len(keys) {
+		_ = h._db.Set(ctx, []byte(key), genFields(key, newKeys))
+	}
+	return nil
 }

@@ -1,5 +1,0 @@
-package gokv
-
-func main() {
-
-}
