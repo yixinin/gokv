@@ -51,7 +51,7 @@ func (l *ldb) GetSnapshot(ctx context.Context) ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func NewStorage(path string) (kvstore.KvStore, error) {
+func NewStorage(path string) (kvstore.Kvstore, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	return &ldb{db: db}, err
 }

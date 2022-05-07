@@ -49,6 +49,6 @@ func (m *memdb) GetSnapshot(ctx context.Context) ([]byte, error) {
 	return json.Marshal(datas)
 }
 
-func NewStorage() kvstore.KvStore {
+func NewStorage() kvstore.Kvstore {
 	return &memdb{}
 }

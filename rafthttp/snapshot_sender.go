@@ -22,7 +22,7 @@ import (
 	"net/http"
 	"time"
 
-	"go.etcd.io/etcd/client/pkg/v3/types"
+	"github.com/yixinin/gokv/types"
 	"go.etcd.io/etcd/pkg/v3/httputil"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.etcd.io/etcd/raft/v3"

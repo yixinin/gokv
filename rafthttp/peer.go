@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/client/pkg/v3/types"
+	"github.com/yixinin/gokv/types"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"

@@ -12,6 +12,7 @@ import (
 
 	// "github.com/yixinin/gokv/wal"
 	"github.com/yixinin/gokv/fileutil"
+	"github.com/yixinin/gokv/rafthttp"
 	"github.com/yixinin/gokv/snap"
 	"github.com/yixinin/gokv/stats"
 	"github.com/yixinin/gokv/types"
@@ -19,7 +20,6 @@ import (
 	"github.com/yixinin/gokv/wal/walpb"
 	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
 
 	"go.uber.org/zap"
 )
@@ -261,7 +261,7 @@ func (rc *raftNode) startRaft() {
 			log.Fatalf("raftexample: cannot create dir for snapshot (%v)", err)
 		}
 	}
-	rc.snapshotter = snap.New(zap.NewExample(), rc.snapdir)
+	rc.snapshotter = snap.New(rc.snapdir)
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
@@ -293,8 +293,8 @@ func (rc *raftNode) startRaft() {
 		ID:          types.ID(rc.id),
 		ClusterID:   0x1000,
 		Raft:        rc,
-		ServerStats: stats.NewServerStats("", ""),
-		LeaderStats: stats.NewLeaderStats(zap.NewExample(), strconv.Itoa(rc.id)),
+		ServerStats: stats.NewServerStats(""),
+		LeaderStats: stats.NewLeaderStats(strconv.Itoa(rc.id)),
 		ErrorC:      make(chan error),
 	}
 

@@ -20,7 +20,7 @@ const (
 	negativeSig = '-'
 )
 
-func String2Bytes(val string, expireAt uint64) []byte {
+func Data2Bytes(val string, expireAt uint64) []byte {
 	var data []byte
 	var typ uint8
 	switch val {
@@ -57,7 +57,8 @@ func String2Bytes(val string, expireAt uint64) []byte {
 	copy(setData[9:], data)
 	return setData
 }
-func Bytes2String(data []byte) (expireAt uint64, s string) {
+
+func Bytes2Data(data []byte) (expireAt uint64, s string) {
 	var size = len(data)
 	if size < 2+8 {
 		return 0, ""
@@ -123,4 +124,16 @@ func getValType(val string) uint8 {
 		return FloatType
 	}
 	return StrType
+}
+
+func Int642Bytes(i int64) []byte {
+	bytesBuffer := bytes.NewBuffer(make([]byte, 0, 8))
+	binary.Write(bytesBuffer, binary.BigEndian, i)
+	return bytesBuffer.Bytes()
+}
+
+func Bytes2Int64(b []byte) int64 {
+	var i int64
+	binary.Read(bytes.NewBuffer(b), binary.BigEndian, &i)
+	return i
 }

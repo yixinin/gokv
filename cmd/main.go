@@ -29,7 +29,7 @@ const (
 func main() {
 	flags()
 
-	var storage kvstore.KvStore
+	var storage kvstore.Kvstore
 	switch strings.ToLower(db) {
 	case LEVELDB:
 		var err error
@@ -62,9 +62,9 @@ func newRaft() {
 	defer close(confChangeC)
 
 	// raft provides a commit stream for the proposals from the http api
-	var kvs kvstore.KvStore
+	var kvs kvstore.Kvstore
 	getSnapshot := func() ([]byte, error) { return kvs.getSnapshot() }
-	commitC, errorC, snapshotterReady := newRaftNode(*id, strings.Split(*cluster, ","), *join, getSnapshot, proposeC, confChangeC)
+	commitC, errorC, snapshotterReady := gokv.NewRaftNode(*id, strings.Split(*cluster, ","), *join, getSnapshot, proposeC, confChangeC)
 
 	kvs = newKVStore(<-snapshotterReady, proposeC, commitC, errorC)
 

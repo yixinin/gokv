@@ -7,8 +7,8 @@ import (
 
 func TestData(t *testing.T) {
 	var i = "false"
-	bs := String2Bytes(i, 0)
+	bs := Data2Bytes(i, 0)
 	fmt.Println(bs)
-	_, f := Bytes2String(bs)
+	_, f := Bytes2Data(bs)
 	fmt.Println(f)
 }

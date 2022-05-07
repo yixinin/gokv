@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yixinin/gokv/types"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
-	"go.etcd.io/etcd/client/pkg/v3/types"
 
 	"github.com/coreos/go-semver/semver"
 	"go.uber.org/zap"

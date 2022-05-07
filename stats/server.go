@@ -1,10 +1,21 @@
 package stats
 
 import (
+	"sync"
 	"time"
 
 	raft "go.etcd.io/etcd/raft/v3"
 )
+
+type ServerStats struct {
+	serverStats
+	sync.Mutex
+}
+
+type LeaderStats struct {
+	serverStats
+	sync.Mutex
+}
 
 type serverStats struct {
 	Name string `json:"name"`
@@ -30,4 +41,12 @@ type serverStats struct {
 
 	sendRateQueue *statsQueue
 	recvRateQueue *statsQueue
+}
+
+func NewServerStats(id string) *ServerStats {
+
+}
+
+func NewLeaderStats(id string) *LeaderStats {
+
 }

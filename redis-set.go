@@ -8,11 +8,11 @@ import (
 )
 
 type _setImpl struct {
-	_db kvstore.KvStore
+	_db kvstore.Kvstore
 }
 
 func (s *_setImpl) Set(ctx context.Context, key string, val string, expireAt uint64) error {
-	err := s._db.Set(ctx, []byte(key), kvstore.String2Bytes(val, expireAt))
+	err := s._db.Set(ctx, []byte(key), kvstore.Data2Bytes(val, expireAt))
 	return err
 }
 
@@ -21,7 +21,7 @@ func (s *_setImpl) Get(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	expireAt, str := kvstore.Bytes2String(data)
+	expireAt, str := kvstore.Bytes2Data(data)
 	if err := s.checkExpire(ctx, key, expireAt); err != nil {
 		return "", err
 	}

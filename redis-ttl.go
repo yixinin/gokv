@@ -10,7 +10,7 @@ import (
 )
 
 type _ttlImpl struct {
-	_db kvstore.KvStore
+	_db kvstore.Kvstore
 }
 
 func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) error {
@@ -19,13 +19,13 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) er
 	if err != nil {
 		return err
 	}
-	oldExpireAt, s := kvstore.Bytes2String(data)
+	oldExpireAt, s := kvstore.Bytes2Data(data)
 	if (oldExpireAt != 0 && oldExpireAt <= nowUnix) ||
 		(expireAt != 0 && expireAt <= nowUnix) {
 		_ = t._db.Delete(ctx, []byte(key))
 		return ErrNotfound
 	}
-	return t._db.Set(ctx, []byte(key), kvstore.String2Bytes(s, expireAt))
+	return t._db.Set(ctx, []byte(key), kvstore.Data2Bytes(s, expireAt))
 }
 
 func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
@@ -34,7 +34,7 @@ func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
 	if err != nil {
 		return -2
 	}
-	expireAt, _ := kvstore.Bytes2String(data)
+	expireAt, _ := kvstore.Bytes2Data(data)
 	if expireAt == 0 {
 		return -1
 	}
@@ -67,7 +67,7 @@ func (t *_ttlImpl) GC(ctx context.Context) {
 				var i int
 
 				t._db.Scan(ctx, func(key, data []byte) {
-					expireAt, _ := kvstore.Bytes2String(data)
+					expireAt, _ := kvstore.Bytes2Data(data)
 					if expireAt != 0 && expireAt <= nowUnix {
 						_ = t._db.Delete(ctx, key)
 					}
