@@ -6,7 +6,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/yixinin/gokv"
-	"github.com/yixinin/gokv/storage"
+	"github.com/yixinin/gokv/kvstore"
 )
 
 type ldb struct {
@@ -36,7 +36,15 @@ func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 	}
 }
 
-func NewStorage(path string) (storage.Storage, error) {
+func (l *ldb) GetSnapshot(ctx context.Context) ([]byte, error) {
+	ss, err := l.db.GetSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(ss.String()), nil
+}
+
+func NewStorage(path string) (kvstore.KvStore, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	return &ldb{db: db}, err
 }

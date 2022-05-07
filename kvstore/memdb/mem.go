@@ -2,10 +2,11 @@ package memdb
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/yixinin/gokv"
-	"github.com/yixinin/gokv/storage"
+	"github.com/yixinin/gokv/kvstore"
 )
 
 type memdb struct {
@@ -39,6 +40,15 @@ func (m *memdb) Scan(ctx context.Context, f func(key, data []byte), limit int, p
 	})
 }
 
-func NewStorage() storage.Storage {
+func (m *memdb) GetSnapshot(ctx context.Context) ([]byte, error) {
+	var datas = make(map[string][]byte, 16)
+	m.m.Range(func(key, value any) bool {
+		datas[key.(string)] = value.([]byte)
+		return false
+	})
+	return json.Marshal(datas)
+}
+
+func NewStorage() kvstore.KvStore {
 	return &memdb{}
 }

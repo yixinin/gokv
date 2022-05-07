@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/yixinin/gokv/storage"
+	"github.com/yixinin/gokv/kvstore"
 )
 
 type _setImpl struct {
-	_db storage.Storage
+	_db kvstore.KvStore
 }
 
 func (s *_setImpl) Set(ctx context.Context, key string, val string, expireAt uint64) error {
-	err := s._db.Set(ctx, []byte(key), storage.String2Bytes(val, expireAt))
+	err := s._db.Set(ctx, []byte(key), kvstore.String2Bytes(val, expireAt))
 	return err
 }
 
@@ -21,7 +21,7 @@ func (s *_setImpl) Get(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	expireAt, str := storage.Bytes2String(data)
+	expireAt, str := kvstore.Bytes2String(data)
 	if err := s.checkExpire(ctx, key, expireAt); err != nil {
 		return "", err
 	}
