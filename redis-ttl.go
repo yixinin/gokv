@@ -2,6 +2,8 @@ package gokv
 
 import (
 	"context"
+	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/yixinin/gokv/storage"
@@ -44,4 +46,40 @@ func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
 }
 
 func (t *_ttlImpl) GC(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println(r, string(debug.Stack()))
+		}
+	}()
+
+	var ticker = time.NewTicker(time.Second)
+	defer ticker.Stop()
+	var prevKey []byte
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			func() {
+				defer recover()
+
+				var nowUnix = uint64(time.Now().Unix())
+				var i int
+
+				t._db.Scan(ctx, func(key, data []byte) {
+					expireAt, _ := storage.Bytes2String(data)
+					if expireAt != 0 && expireAt <= nowUnix {
+						_ = t._db.Delete(ctx, key)
+					}
+					prevKey = key
+					i++
+				}, 1000, prevKey)
+
+				if i == 0 {
+					prevKey = []byte{}
+				}
+			}()
+
+		}
+	}
 }

@@ -30,6 +30,15 @@ func (m *memdb) Delete(ctx context.Context, key []byte) error {
 	return nil
 }
 
+func (m *memdb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
+	var i int
+	m.m.Range(func(key, value any) bool {
+		f([]byte(key.(string)), value.([]byte))
+		i++
+		return i < limit
+	})
+}
+
 func NewStorage() storage.Storage {
 	return &memdb{}
 }

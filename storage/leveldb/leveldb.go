@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/yixinin/gokv"
 	"github.com/yixinin/gokv/storage"
 )
@@ -25,6 +26,14 @@ func (l *ldb) Get(ctx context.Context, key []byte) ([]byte, error) {
 }
 func (l *ldb) Delete(ctx context.Context, key []byte) error {
 	return l.db.Delete(key, nil)
+}
+func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
+	slice := util.BytesPrefix(prefix)
+	iter := l.db.NewIterator(slice, nil)
+	defer iter.Release()
+	for i := 0; iter.Next() && i < limit; i++ {
+		f(iter.Key(), iter.Value())
+	}
 }
 
 func NewStorage(path string) (storage.Storage, error) {
