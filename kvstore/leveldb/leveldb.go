@@ -2,6 +2,7 @@ package leveldb
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -38,10 +39,16 @@ func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 
 func (l *ldb) GetSnapshot(ctx context.Context) ([]byte, error) {
 	ss, err := l.db.GetSnapshot()
+	defer ss.Release()
 	if err != nil {
 		return nil, err
 	}
-	return []byte(ss.String()), nil
+	var m = make(map[string][]byte, 16)
+	iter := ss.NewIterator(nil, nil)
+	for iter.Next() {
+		m[string(iter.Key())] = iter.Value()
+	}
+	return json.Marshal(m)
 }
 
 func NewStorage(path string) (kvstore.KvStore, error) {

@@ -17,7 +17,7 @@ func Exist(dir string) bool {
 	return false
 }
 
-func ValidSnapshotEntries(logger any, dir string) (walpb.Snapshot, error) {
+func ValidSnapshotEntries(dir string) (walpb.Snapshot, error) {
 	return nil, nil
 }
 

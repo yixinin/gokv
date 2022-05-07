@@ -10,15 +10,16 @@ import (
 	"strconv"
 	"time"
 
+	// "github.com/yixinin/gokv/wal"
+	"github.com/yixinin/gokv/fileutil"
+	"github.com/yixinin/gokv/snap"
+	"github.com/yixinin/gokv/stats"
+	"github.com/yixinin/gokv/types"
 	"github.com/yixinin/gokv/wal"
 	"github.com/yixinin/gokv/wal/walpb"
-	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-	"go.etcd.io/etcd/client/pkg/v3/types"
 	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
-	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
 
 	"go.uber.org/zap"
 )
@@ -60,7 +61,6 @@ type raftNode struct {
 	httpstopc chan struct{} // signals http server to shutdown
 	httpdonec chan struct{} // signals http server shutdown complete
 
-	logger *zap.Logger
 }
 
 var defaultSnapshotCount uint64 = 10000
@@ -91,8 +91,6 @@ func NewRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, 
 		stopc:       make(chan struct{}),
 		httpstopc:   make(chan struct{}),
 		httpdonec:   make(chan struct{}),
-
-		logger: zap.NewExample(),
 
 		snapshotterReady: make(chan *snap.Snapshotter, 1),
 		// rest of structure populated after WAL replay
@@ -188,7 +186,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) 
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 	if wal.Exist(rc.waldir) {
-		walSnaps, err := wal.ValidSnapshotEntries(rc.logger, rc.waldir)
+		walSnaps, err := wal.ValidSnapshotEntries(rc.waldir)
 		if err != nil {
 			log.Fatalf("raftexample: error listing snapshots (%v)", err)
 		}
@@ -292,7 +290,6 @@ func (rc *raftNode) startRaft() {
 	}
 
 	rc.transport = &rafthttp.Transport{
-		Logger:      rc.logger,
 		ID:          types.ID(rc.id),
 		ClusterID:   0x1000,
 		Raft:        rc,
