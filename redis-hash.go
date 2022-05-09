@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 )
 
@@ -149,7 +150,7 @@ func (h *_hashImpl) HSet(ctx context.Context, key, field, val string) error {
 		return err
 	}
 	fkey := genHashFieldKey(key, field)
-	return h._db.Set(ctx, fkey, kvstore.Data2Bytes(val, 0))
+	return h._db.Set(ctx, fkey, codec.Encode(val).SavedData())
 }
 
 func (h *_hashImpl) HGet(ctx context.Context, key, field string) (string, error) {
@@ -162,11 +163,11 @@ func (h *_hashImpl) HGet(ctx context.Context, key, field string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	expireAt, s := kvstore.Bytes2Data(data)
-	if err := h.checkExpire(ctx, key, expireAt); err != nil {
+	v := codec.Decode(data)
+	if err := h.checkExpire(ctx, key, v.ExpireAt()); err != nil {
 		return "", err
 	}
-	return s, nil
+	return v.String(), nil
 }
 func (h *_hashImpl) checkExpire(ctx context.Context, key string, expireAt uint64) error {
 	var unixNow = uint64(time.Now().Unix())
@@ -199,7 +200,7 @@ func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string,
 		if err != nil {
 			return nil, err
 		}
-		_, m[string(key)] = kvstore.Bytes2Data(data)
+		m[string(key)] = codec.Decode(data).String()
 		newKeys = append(newKeys, string(key))
 	}
 	if len(newKeys) < len(keys) {

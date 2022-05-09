@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 )
 
@@ -19,13 +20,15 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) er
 	if err != nil {
 		return err
 	}
-	oldExpireAt, s := kvstore.Bytes2Data(data)
+	v := codec.Decode(data)
+	oldExpireAt := v.ExpireAt()
 	if (oldExpireAt != 0 && oldExpireAt <= nowUnix) ||
 		(expireAt != 0 && expireAt <= nowUnix) {
 		_ = t._db.Delete(ctx, []byte(key))
 		return ErrNotfound
 	}
-	return t._db.Set(ctx, []byte(key), kvstore.Data2Bytes(s, expireAt))
+	v.SetExpireAt(expireAt)
+	return t._db.Set(ctx, []byte(key), v.SavedData())
 }
 
 func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
@@ -34,7 +37,8 @@ func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
 	if err != nil {
 		return -2
 	}
-	expireAt, _ := kvstore.Bytes2Data(data)
+	v := codec.Decode(data)
+	expireAt := v.ExpireAt()
 	if expireAt == 0 {
 		return -1
 	}
@@ -67,7 +71,7 @@ func (t *_ttlImpl) GC(ctx context.Context) {
 				var i int
 
 				t._db.Scan(ctx, func(key, data []byte) {
-					expireAt, _ := kvstore.Bytes2Data(data)
+					expireAt := codec.Decode(data).ExpireAt()
 					if expireAt != 0 && expireAt <= nowUnix {
 						_ = t._db.Delete(ctx, key)
 					}

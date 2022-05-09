@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 )
 
@@ -15,8 +16,8 @@ func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, er
 	data, err := n._db.Get(ctx, []byte(key))
 	if err != nil {
 		if err == ErrNotfound {
-			data := kvstore.Data2Bytes(val, 0)
-			if data[0] != kvstore.IntType {
+			v := codec.Encode(val)
+			if v.Type() != codec.NIL {
 				return "", ErrValOpType
 			}
 			err := n._db.Set(ctx, []byte(key), data)
@@ -28,12 +29,12 @@ func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, er
 	if err != nil {
 		return "", ErrValOpType
 	}
-	sumB := bytesAdd(data[9:], kvstore.Int642Bytes(i))
+	sumB := bytesAdd(data[9:], codec.Int642Bytes(i))
 	err = n._db.Set(ctx, []byte(key), data)
 	if err != nil {
 		return "", err
 	}
-	sum := kvstore.Bytes2Int64(sumB)
+	sum := codec.Bytes2Int64(sumB)
 	return strconv.FormatInt(sum, 10), err
 }
 
