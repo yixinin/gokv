@@ -24,11 +24,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"github.com/yixinin/gokv/impls/snap"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/api/v3/version"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
 
 	humanize "github.com/dustin/go-humanize"
 	"go.uber.org/zap"
@@ -66,7 +67,7 @@ type writerToResponse interface {
 }
 
 type pipelineHandler struct {
-	lg      *zap.Logger
+	lg      *logrus.Logger
 	localID types.ID
 	tr      Transporter
 	r       Raft
@@ -87,7 +88,7 @@ func newPipelineHandler(t *Transport, r Raft, cid types.ID) http.Handler {
 		cid:     cid,
 	}
 	if h.lg == nil {
-		h.lg = zap.NewNop()
+		h.lg = logrus.StandardLogger()
 	}
 	return h
 }
@@ -161,7 +162,7 @@ func (h *pipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type snapshotHandler struct {
-	lg          *zap.Logger
+	lg          *logrus.Logger
 	tr          Transporter
 	r           Raft
 	snapshotter *snap.Snapshotter
@@ -180,7 +181,7 @@ func newSnapshotHandler(t *Transport, r Raft, snapshotter *snap.Snapshotter, cid
 		cid:         cid,
 	}
 	if h.lg == nil {
-		h.lg = zap.NewNop()
+		h.lg = logrus.StandardLogger()
 	}
 	return h
 }
@@ -322,7 +323,7 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type streamHandler struct {
-	lg         *zap.Logger
+	lg         *logrus.Logger
 	tr         *Transport
 	peerGetter peerGetter
 	r          Raft
@@ -340,7 +341,7 @@ func newStreamHandler(t *Transport, pg peerGetter, r Raft, id, cid types.ID) htt
 		cid:        cid,
 	}
 	if h.lg == nil {
-		h.lg = zap.NewNop()
+		h.lg = logrus.StandardLogger()
 	}
 	return h
 }
@@ -456,7 +457,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // It checks whether the version of local member is compatible with
 // the versions in the header, and whether the cluster ID of local member
 // matches the one in the header.
-func checkClusterCompatibilityFromHeader(lg *zap.Logger, localID types.ID, header http.Header, cid types.ID) error {
+func checkClusterCompatibilityFromHeader(lg *logrus.Logger, localID types.ID, header http.Header, cid types.ID) error {
 	remoteName := header.Get("X-Server-From")
 
 	remoteServer := serverVersion(header)

@@ -22,11 +22,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"github.com/yixinin/gokv/impls/snap"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/pkg/v3/httputil"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
 
 	"github.com/dustin/go-humanize"
 	"go.uber.org/zap"
@@ -184,7 +185,7 @@ func (s *snapshotSender) post(req *http.Request) (err error) {
 	}
 }
 
-func createSnapBody(lg *zap.Logger, merged snap.Message) io.ReadCloser {
+func createSnapBody(lg *logrus.Logger, merged snap.Message) io.ReadCloser {
 	buf := new(bytes.Buffer)
 	enc := &messageEncoder{w: buf}
 	// encode raft message

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
@@ -61,7 +62,7 @@ func newStreamRoundTripper(tlsInfo transport.TLSInfo, dialTimeout time.Duration)
 }
 
 // createPostRequest creates a HTTP POST request that sends raft message.
-func createPostRequest(lg *zap.Logger, u url.URL, path string, body io.Reader, ct string, urls types.URLs, from, cid types.ID) *http.Request {
+func createPostRequest(lg *logrus.Logger, u url.URL, path string, body io.Reader, ct string, urls types.URLs, from, cid types.ID) *http.Request {
 	uu := u
 	uu.Path = path
 	req, err := http.NewRequest("POST", uu.String(), body)
@@ -82,7 +83,7 @@ func createPostRequest(lg *zap.Logger, u url.URL, path string, body io.Reader, c
 
 // checkPostResponse checks the response of the HTTP POST request that sends
 // raft message.
-func checkPostResponse(lg *zap.Logger, resp *http.Response, body []byte, req *http.Request, to types.ID) error {
+func checkPostResponse(lg *logrus.Logger, resp *http.Response, body []byte, req *http.Request, to types.ID) error {
 	switch resp.StatusCode {
 	case http.StatusPreconditionFailed:
 		switch strings.TrimSuffix(string(body), "\n") {

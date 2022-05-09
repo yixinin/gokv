@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/snap"
 	stats "github.com/yixinin/gokv/impls/stats"
 	"github.com/yixinin/gokv/impls/types"
@@ -99,7 +100,7 @@ type Peer interface {
 // A pipeline is a series of http clients that send http requests to the remote.
 // It is only used when the stream has not been established.
 type peer struct {
-	lg *zap.Logger
+	lg *logrus.Logger
 
 	localID types.ID
 	// id of the remote raft peer node

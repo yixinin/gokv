@@ -15,6 +15,7 @@
 package rafthttp
 
 import (
+	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
@@ -22,7 +23,7 @@ import (
 )
 
 type remote struct {
-	lg       *zap.Logger
+	lg       *logrus.Logger
 	localID  types.ID
 	id       types.ID
 	status   *peerStatus

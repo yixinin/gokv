@@ -18,8 +18,8 @@ func Exist(dir string) bool {
 	return false
 }
 
-func ValidSnapshotEntries(dir string) (walpb.Snapshot, error) {
-	return walpb.Snapshot{}, nil
+func ValidSnapshotEntries(dir string) ([]walpb.Snapshot, error) {
+	return []walpb.Snapshot{}, nil
 }
 
 func Create(logger any, dir string, data []byte) (WAL, error) {

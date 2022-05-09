@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/types"
 
 	"go.uber.org/zap"
@@ -31,7 +32,7 @@ type failureType struct {
 }
 
 type peerStatus struct {
-	lg     *zap.Logger
+	lg     *logrus.Logger
 	local  types.ID
 	id     types.ID
 	mu     sync.Mutex // protect variables below
@@ -39,9 +40,9 @@ type peerStatus struct {
 	since  time.Time
 }
 
-func newPeerStatus(lg *zap.Logger, local, id types.ID) *peerStatus {
+func newPeerStatus(lg *logrus.Logger, local, id types.ID) *peerStatus {
 	if lg == nil {
-		lg = zap.NewNop()
+		lg = logrus.StandardLogger()
 	}
 	return &peerStatus{lg: lg, local: local, id: id}
 }

@@ -25,12 +25,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	stats "github.com/yixinin/gokv/impls/stats"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/pkg/v3/httputil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
 
 	"github.com/coreos/go-semver/semver"
 	"go.uber.org/zap"
@@ -64,7 +65,7 @@ var (
 
 type streamType string
 
-func (t streamType) endpoint(lg *zap.Logger) string {
+func (t streamType) endpoint(lg *logrus.Logger) string {
 	switch t {
 	case streamTypeMsgAppV2:
 		return path.Join(RaftStreamPrefix, "msgapp")
@@ -112,7 +113,7 @@ type outgoingConn struct {
 
 // streamWriter writes messages to the attached outgoingConn.
 type streamWriter struct {
-	lg *zap.Logger
+	lg *logrus.Logger
 
 	localID types.ID
 	peerID  types.ID
@@ -133,7 +134,7 @@ type streamWriter struct {
 
 // startStreamWriter creates a streamWrite and starts a long running go-routine that accepts
 // messages and writes to the attached outgoing connection.
-func startStreamWriter(lg *zap.Logger, local, id types.ID, status *peerStatus, fs *stats.FollowerStats, r Raft) *streamWriter {
+func startStreamWriter(lg *logrus.Logger, local, id types.ID, status *peerStatus, fs *stats.FollowerStats, r Raft) *streamWriter {
 	w := &streamWriter{
 		lg: lg,
 
@@ -353,7 +354,7 @@ func (cw *streamWriter) stop() {
 // streamReader is a long-running go-routine that dials to the remote stream
 // endpoint and reads messages from the response body returned.
 type streamReader struct {
-	lg *zap.Logger
+	lg *logrus.Logger
 
 	peerID types.ID
 	typ    streamType

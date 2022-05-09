@@ -19,9 +19,9 @@ import (
 	"reflect"
 	"testing"
 
+	stats "github.com/yixinin/gokv/impls/stats"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
 )
 
 func TestMsgAppV2(t *testing.T) {

@@ -20,12 +20,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"github.com/yixinin/gokv/impls/snap"
 	stats "github.com/yixinin/gokv/impls/stats"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
 
 	"github.com/xiang90/probing"
 	"go.uber.org/zap"
@@ -95,6 +96,7 @@ type Transporter interface {
 // User needs to call Start before calling other functions, and call
 // Stop when the Transport is no longer used.
 type Transport struct {
+	Logger      *logrus.Logger
 	DialTimeout time.Duration // maximum duration before timing out dial of the request
 	// DialRetryFrequency defines the frequency of streamReader dial retrial attempts;
 	// a distinct rate limiter is created per every peer (default value: 10 events/sec)

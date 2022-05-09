@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 	"github.com/xiang90/probing"
 	"go.uber.org/zap"
 )
@@ -38,7 +39,7 @@ var (
 	statusErrorInterval      = 5 * time.Second
 )
 
-func addPeerToProber(lg *zap.Logger, p probing.Prober, id string, us []string, roundTripperName string, rttSecProm *prometheus.HistogramVec) {
+func addPeerToProber(lg *logrus.Logger, p probing.Prober, id string, us []string, roundTripperName string, rttSecProm *prometheus.HistogramVec) {
 	hus := make([]string, len(us))
 	for i := range us {
 		hus[i] = us[i] + ProbingPrefix
@@ -57,7 +58,7 @@ func addPeerToProber(lg *zap.Logger, p probing.Prober, id string, us []string, r
 	go monitorProbingStatus(lg, s, id, roundTripperName, rttSecProm)
 }
 
-func monitorProbingStatus(lg *zap.Logger, s probing.Status, id string, roundTripperName string, rttSecProm *prometheus.HistogramVec) {
+func monitorProbingStatus(lg *logrus.Logger, s probing.Status, id string, roundTripperName string, rttSecProm *prometheus.HistogramVec) {
 	// set the first interval short to log error early.
 	interval := statusErrorInterval
 	for {

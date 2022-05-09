@@ -50,14 +50,14 @@ var (
 )
 
 type Snapshotter struct {
-	lg  *zap.Logger
+	lg  *logrus.Logger
 	dir string
 }
 
 func New(dir string) *Snapshotter {
 	return &Snapshotter{
 		dir: dir,
-		lg:  logrus.StdLogger,
+		lg:  logrus.StandardLogger(),
 	}
 }
 
@@ -128,9 +128,9 @@ func (s *Snapshotter) loadMatching(matchFn func(*raftpb.Snapshot) bool) (*raftpb
 }
 
 func loadSnap(dir, name string) (*raftpb.Snapshot, error) {
-	lg := logrus.StdLogger
+	lg := logrus.StandardLogger()
 	fpath := filepath.Join(dir, name)
-	snap, err := Read(lg, fpath)
+	snap, err := Read(fpath)
 	if err != nil {
 		brokenPath := fpath + ".broken"
 		if lg != nil {
@@ -151,7 +151,7 @@ func loadSnap(dir, name string) (*raftpb.Snapshot, error) {
 
 // Read reads the snapshot named by snapname and returns the snapshot.
 func Read(snapname string) (*raftpb.Snapshot, error) {
-	lg := logrus.StdLogger
+	lg := logrus.StandardLogger()
 	b, err := os.ReadFile(snapname)
 	if err != nil {
 		if lg != nil {
@@ -220,7 +220,7 @@ func (s *Snapshotter) snapNames() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	snaps := checkSuffix(s.lg, filenames)
+	snaps := checkSuffix(filenames)
 	if len(snaps) == 0 {
 		return nil, ErrNoSnapshot
 	}
@@ -228,7 +228,8 @@ func (s *Snapshotter) snapNames() ([]string, error) {
 	return snaps, nil
 }
 
-func checkSuffix(lg *zap.Logger, names []string) []string {
+func checkSuffix(names []string) []string {
+	lg := logrus.StandardLogger()
 	snaps := []string{}
 	for i := range names {
 		if strings.HasSuffix(names[i], snapSuffix) {
