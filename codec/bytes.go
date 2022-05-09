@@ -5,8 +5,15 @@ import (
 	"encoding/binary"
 )
 
+const (
+	TypeSize   = 1
+	ExpireSize = 8
+	NumberSize = 8
+	HeaderSize = 9
+)
+
 func Int642Bytes(i int64) []byte {
-	bytesBuffer := bytes.NewBuffer(make([]byte, 0, 8))
+	bytesBuffer := bytes.NewBuffer(make([]byte, 0, ExpireSize))
 	binary.Write(bytesBuffer, binary.BigEndian, i)
 	return bytesBuffer.Bytes()
 }
@@ -18,7 +25,7 @@ func Bytes2Int64(b []byte) int64 {
 }
 
 func Float2Bytes(f float64) []byte {
-	bytesBuffer := bytes.NewBuffer(make([]byte, 0, 8))
+	bytesBuffer := bytes.NewBuffer(make([]byte, 0, ExpireSize))
 	binary.Write(bytesBuffer, binary.BigEndian, f)
 	return bytesBuffer.Bytes()
 }

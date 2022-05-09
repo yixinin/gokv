@@ -14,17 +14,23 @@ type _numImpl struct {
 
 func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, error) {
 	data, err := n._db.Get(ctx, []byte(key))
-	if err != nil {
-		if err == ErrNotfound {
-			v := codec.Encode(val)
-			if v.Type() != codec.NIL {
-				return "", ErrValOpType
-			}
-			err := n._db.Set(ctx, []byte(key), data)
-			return val, err
-		}
+	if err != nil && err != ErrNotfound {
+
 		return "", err
 	}
+	oldV := codec.Decode(data)
+
+	// set new
+	if oldV.Expired() || err == ErrNotfound {
+		v := codec.Encode(val)
+		if v.Type() != codec.IntType {
+			return "", ErrValOpType
+		}
+		err := n._db.Set(ctx, []byte(key), v.SavedData())
+		return val, err
+	}
+
+	// incr
 	i, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
 		return "", ErrValOpType

@@ -12,9 +12,20 @@ type ServerStats struct {
 	sync.Mutex
 }
 
+func (*ServerStats) SendAppendReq(int) {
+
+}
+
 type LeaderStats struct {
 	serverStats
 	sync.Mutex
+}
+
+type FollowerStats struct {
+}
+
+func (*LeaderStats) Follower(string) {
+
 }
 
 type serverStats struct {
@@ -44,9 +55,9 @@ type serverStats struct {
 }
 
 func NewServerStats(id string) *ServerStats {
-
+	return nil
 }
 
 func NewLeaderStats(id string) *LeaderStats {
-
+	return nil
 }

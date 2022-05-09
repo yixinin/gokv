@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yixinin/gokv/snap"
+	stats "github.com/yixinin/gokv/stats"
 	"github.com/yixinin/gokv/types"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
-	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
 
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"

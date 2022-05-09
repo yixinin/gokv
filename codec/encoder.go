@@ -36,13 +36,13 @@ func (e byesEncoder) Encode(s string, ex ...uint64) Value {
 		switch v.t {
 		case FloatType:
 			f, _ := strconv.ParseFloat(s, 64)
-			bytesBuffer := bytes.NewBuffer(make([]byte, 0, 8))
+			bytesBuffer := bytes.NewBuffer(make([]byte, 0, NumberSize))
 			binary.Write(bytesBuffer, binary.BigEndian, f)
 			data = bytesBuffer.Bytes()
 			v.f = f
 		case IntType:
 			i, _ := strconv.ParseInt(s, 10, 64)
-			bytesBuffer := bytes.NewBuffer(make([]byte, 0, 8))
+			bytesBuffer := bytes.NewBuffer(make([]byte, 0, NumberSize))
 			binary.Write(bytesBuffer, binary.BigEndian, i)
 			data = bytesBuffer.Bytes()
 			v.i = i
@@ -50,13 +50,13 @@ func (e byesEncoder) Encode(s string, ex ...uint64) Value {
 			data = []byte(s)
 		}
 	}
-	v.raw = make([]byte, 1+8+len(data))
-	v.raw[0] = v.t
+	v.data = make([]byte, HeaderSize+len(data))
+	v.data[0] = v.t
 
-	var eb = make([]byte, 8)
+	var eb = make([]byte, ExpireSize)
 	binary.BigEndian.PutUint64(eb, v.e)
-	copy(v.raw[1:9], eb)
+	copy(v.data[TypeSize:HeaderSize], eb)
 
-	copy(v.raw[9:], data)
+	copy(v.data[HeaderSize:], data)
 	return v
 }

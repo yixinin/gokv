@@ -18,7 +18,7 @@ func Exist(dir string) bool {
 }
 
 func ValidSnapshotEntries(dir string) (walpb.Snapshot, error) {
-	return nil, nil
+	return walpb.Snapshot{}, nil
 }
 
 func Create(logger any, dir string, data []byte) (WAL, error) {

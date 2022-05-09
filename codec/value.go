@@ -3,6 +3,7 @@ package codec
 import (
 	"encoding/binary"
 	"strconv"
+	"time"
 )
 
 type Value struct {
@@ -12,7 +13,7 @@ type Value struct {
 	i int64
 	f float64
 
-	raw []byte
+	data []byte
 
 	e uint64
 }
@@ -23,14 +24,14 @@ func (v Value) CopyFrom(nv Value) {
 	v.t = nv.t
 	v.f = nv.f
 	v.i = nv.i
-	v.raw = nv.raw
+	v.data = nv.data
 }
 
 func (v Value) SetExpireAt(ex uint64) {
 	v.e = ex
-	eb := make([]byte, 8)
+	eb := make([]byte, ExpireSize)
 	binary.BigEndian.PutUint64(eb, ex)
-	copy(v.raw[1:9], eb)
+	copy(v.data[1:HeaderSize], eb)
 
 }
 
@@ -58,27 +59,27 @@ func (v Value) SetBool(b bool) {
 	v.SetBytes(bs)
 }
 func (v Value) SetBytes(bs []byte) {
-	if len(v.raw)-9 != len(bs) {
-		data := make([]byte, len(bs)+9)
-		copy(data[:9], v.raw[:9])
-		v.raw = data
+	if len(v.data)-HeaderSize != len(bs) {
+		data := make([]byte, len(bs)+HeaderSize)
+		copy(data[:HeaderSize], v.data[:HeaderSize])
+		v.data = data
 	}
-	copy(v.raw[9:], bs)
+	copy(v.data[HeaderSize:], bs)
 }
 func (v Value) Valid() bool {
 	if v.Type() == NIL {
 		return false
 	}
-	if len(v.raw) <= 9 {
+	if len(v.data) <= HeaderSize {
 		return false
 	}
 	switch v.t {
 	case BoolType:
-		if len(v.raw) != 1+8+1 {
+		if len(v.data) != HeaderSize+1 {
 			return false
 		}
 	case IntType, FloatType:
-		if len(v.raw) != 1+8+8 {
+		if len(v.data) != HeaderSize+8 {
 			return false
 		}
 	}
@@ -87,6 +88,13 @@ func (v Value) Valid() bool {
 
 func (v Value) ExpireAt() uint64 {
 	return v.e
+}
+
+func (v Value) Expired() bool {
+	if v.e == 0 {
+		return false
+	}
+	return time.Now().Unix() > int64(v.e)
 }
 
 func (v Value) Type() uint8 {
@@ -99,7 +107,7 @@ func (v Value) Type() uint8 {
 }
 
 func (v Value) String() string {
-	if len(v.raw) <= 9 {
+	if len(v.data) <= HeaderSize {
 		return ""
 	}
 	switch v.t {
@@ -115,7 +123,7 @@ func (v Value) String() string {
 	case FloatType:
 		return strconv.FormatFloat(v.f, 'f', '-', 64)
 	}
-	return string(v.raw[9:])
+	return string(v.data[HeaderSize:])
 }
 func (v Value) Bool() (bool, bool) {
 	return v.b, v.t == BoolType
@@ -128,14 +136,14 @@ func (v Value) Float() (float64, bool) {
 	return v.f, v.t == FloatType
 }
 func (v Value) Bytes() []byte {
-	if len(v.raw) <= 9 {
+	if len(v.data) <= HeaderSize {
 		return nil
 	}
-	return v.raw[9:]
+	return v.data[HeaderSize:]
 }
 
 func (v Value) SavedData() []byte {
-	return v.raw
+	return v.data
 }
 
 const (
@@ -146,10 +154,10 @@ const (
 	StrType   uint8 = 0b00000100
 )
 const (
-	min         = '0'
-	max         = '9'
-	dot         = '.'
-	negativeSig = '-'
+	MinNumByte   = '0'
+	MaxNumByte   = '9'
+	DotByte      = '.'
+	NegativeByte = '-'
 )
 
 func getValType(val string) uint8 {
@@ -162,15 +170,15 @@ func getValType(val string) uint8 {
 
 	var isInt, isFloat = true, true
 	var start = 0
-	if val[0] == negativeSig {
+	if val[0] == NegativeByte {
 		start = 1
 	}
 
 	for i, v := range val[start:] {
 		if isInt || isFloat {
-			if v < min || v > max {
+			if v < MinNumByte || v > MaxNumByte {
 				isInt = false
-				if v != dot {
+				if v != DotByte {
 					isFloat = false
 				} else {
 					dotCount++
