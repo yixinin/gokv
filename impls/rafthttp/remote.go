@@ -15,7 +15,7 @@
 package rafthttp
 
 import (
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
 	"go.uber.org/zap"

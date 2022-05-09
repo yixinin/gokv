@@ -18,7 +18,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/types"
 )
 
 type urlPicker struct {

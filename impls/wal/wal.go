@@ -1,8 +1,8 @@
 package wal
 
 import (
+	"github.com/yixinin/gokv/impls/wal/walpb"
 	"github.com/yixinin/gokv/kvstore"
-	"github.com/yixinin/gokv/wal/walpb"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 
