@@ -21,4 +21,9 @@ func TestRedis(t *testing.T) {
 	fmt.Println(r, err)
 	r, err = s.Incr(ctx, "asd", "2")
 	fmt.Println(r, err)
+
+	err = s.HSet(ctx, "hk1", "hf3", "hv3")
+	fmt.Println(err)
+	hv, err := s.HGetAll(ctx, "hk1")
+	fmt.Println(hv, err)
 }

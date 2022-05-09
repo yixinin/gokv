@@ -117,28 +117,28 @@ func (h *_hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) e
 	}
 }
 
-func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([][]byte, error) {
+func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([][]byte, []string, error) {
 	var bKey = []byte(key)
 	hkval, err := h._db.Get(ctx, bKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
-		return nil, ErrKeyOPType
+		return nil, nil, ErrKeyOPType
 	}
 	if hkval[0] != 'h' || hkval[1] != ':' {
-		return nil, ErrKeyOPType
+		return nil, nil, ErrKeyOPType
 	}
 	if !sliceEq(hkval[2:2+len(key)], bKey) {
-		return nil, ErrKeyOPType
+		return nil, nil, ErrKeyOPType
 	}
 	fields := readFields(hkval[2+len(key)+1:])
 	var keys = make([][]byte, 0, len(fields))
 	for _, f := range fields {
 		keys = append(keys, genHashFieldKey(key, f))
 	}
-	return keys, nil
+	return keys, fields, nil
 }
 
 func genHashFieldKey(key, field string) []byte {
@@ -174,7 +174,7 @@ func (h *_hashImpl) checkExpire(ctx context.Context, key string, expireAt uint64
 	if expireAt != 0 && expireAt <= unixNow {
 		go func(ctx context.Context) {
 			defer recover()
-			keys, _ := h.hGetAllKeys(ctx, key)
+			keys, _, _ := h.hGetAllKeys(ctx, key)
 			for _, k := range keys {
 				_ = h._db.Delete(ctx, k)
 			}
@@ -186,13 +186,13 @@ func (h *_hashImpl) checkExpire(ctx context.Context, key string, expireAt uint64
 }
 
 func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string, error) {
-	keys, err := h.hGetAllKeys(ctx, key)
+	keys, fields, err := h.hGetAllKeys(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	var m = make(map[string]string, len(key))
 	var newKeys = make([]string, 0, len(keys))
-	for _, key := range keys {
+	for i, key := range keys {
 		data, err := h._db.Get(ctx, key)
 		if err == ErrNotfound {
 			continue
@@ -200,7 +200,7 @@ func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string,
 		if err != nil {
 			return nil, err
 		}
-		m[string(key)] = codec.Decode(data).String()
+		m[fields[i]] = codec.Decode(data).String()
 		newKeys = append(newKeys, string(key))
 	}
 	if len(newKeys) < len(keys) {
@@ -210,7 +210,7 @@ func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string,
 }
 
 func (h *_hashImpl) HDel(ctx context.Context, key string, field ...string) error {
-	keys, err := h.hGetAllKeys(ctx, key)
+	keys, _, err := h.hGetAllKeys(ctx, key)
 	if err != nil {
 		return err
 	}
