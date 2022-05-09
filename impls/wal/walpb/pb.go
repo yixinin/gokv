@@ -9,5 +9,4 @@ type Snapshot struct {
 }
 
 func (s Snapshot) Close() {
-
 }

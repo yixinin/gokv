@@ -1,6 +1,7 @@
 package wal
 
 import (
+	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/wal/walpb"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -26,4 +27,24 @@ func Create(logger any, dir string, data []byte) (WAL, error) {
 }
 func Open(logger any, dir string, snap walpb.Snapshot) (WAL, error) {
 	return nil, nil
+}
+
+type wal struct {
+	db kvstore.Kvstore
+}
+
+func (w *wal) SaveSnapshot(snap walpb.Snapshot) error {
+
+}
+func (w *wal) ReleaseLockTo(index uint64) error {
+
+}
+func (w *wal) Save(hs raftpb.HardState, entries []raftpb.Entry) {
+
+}
+func (w *wal) ReadAll() (metadata []byte, state raftpb.HardState, ents []raftpb.Entry, err error) {
+
+}
+func (w *wal) Close() error {
+
 }

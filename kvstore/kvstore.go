@@ -8,4 +8,5 @@ type Kvstore interface {
 	Delete(ctx context.Context, key []byte) error
 	Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte)
 	GetSnapshot(ctx context.Context) ([]byte, error)
+	RecoverFromSnapshot(ctx context.Context, data []byte) error
 }

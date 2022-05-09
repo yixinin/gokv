@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	stats "github.com/yixinin/gokv/stats"
-	"github.com/yixinin/gokv/types"
+	stats "github.com/yixinin/gokv/impls/stats"
+	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/pkg/v3/pbutil"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"

@@ -51,7 +51,23 @@ func (l *ldb) GetSnapshot(ctx context.Context) ([]byte, error) {
 	return json.Marshal(m)
 }
 
+func (m *ldb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
+	var datas = make(map[string][]byte)
+	err := json.Unmarshal(data, &datas)
+	if err != nil {
+		return err
+	}
+	m.clearAndReopen(ctx)
+	for k, val := range datas {
+		m.Set(ctx, []byte(k), val)
+	}
+	return nil
+}
+
 func NewStorage(path string) (kvstore.Kvstore, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	return &ldb{db: db}, err
+}
+func (m *ldb) clearAndReopen(ctx context.Context) {
+
 }

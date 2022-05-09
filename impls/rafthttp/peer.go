@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yixinin/gokv/snap"
-	stats "github.com/yixinin/gokv/stats"
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/snap"
+	stats "github.com/yixinin/gokv/impls/stats"
+	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 

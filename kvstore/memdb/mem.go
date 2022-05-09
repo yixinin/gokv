@@ -14,6 +14,10 @@ type memdb struct {
 }
 
 func (m *memdb) Set(ctx context.Context, key, val []byte) error {
+	return m.set(ctx, string(key), val)
+}
+
+func (m *memdb) set(ctx context.Context, key string, val []byte) error {
 	m.m.Store(string(key), val)
 	return nil
 }
@@ -47,6 +51,19 @@ func (m *memdb) GetSnapshot(ctx context.Context) ([]byte, error) {
 		return false
 	})
 	return json.Marshal(datas)
+}
+
+func (m *memdb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
+	var datas = make(map[string][]byte)
+	err := json.Unmarshal(data, &datas)
+	if err != nil {
+		return err
+	}
+	m.m = sync.Map{}
+	for k, val := range datas {
+		m.set(ctx, k, val)
+	}
+	return nil
 }
 
 func NewStorage() kvstore.Kvstore {

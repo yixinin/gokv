@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/api/v3/version"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"

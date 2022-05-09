@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yixinin/gokv/types"
+	"github.com/yixinin/gokv/impls/types"
 
 	"go.uber.org/zap"
 )
