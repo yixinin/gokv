@@ -10,3 +10,6 @@ type Kvstore interface {
 	GetSnapshot(ctx context.Context) ([]byte, error)
 	RecoverFromSnapshot(ctx context.Context, data []byte) error
 }
+
+var NewLevelDB func(string) (Kvstore, error)
+var NewMemDB func() Kvstore

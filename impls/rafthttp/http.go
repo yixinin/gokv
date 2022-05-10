@@ -32,7 +32,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
 	humanize "github.com/dustin/go-humanize"
-	"go.uber.org/zap"
 )
 
 const (
@@ -116,8 +115,8 @@ func (h *pipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.lg.Warn(
 			"failed to read Raft message",
-			zap.String("local-member-id", h.localID.String()),
-			zap.Error(err),
+			logrus.WithField("local-member-id", h.localID.String()),
+			logrus.WithError(err),
 		)
 		http.Error(w, "error reading raft message", http.StatusBadRequest)
 		recvFailures.WithLabelValues(r.RemoteAddr).Inc()
@@ -128,8 +127,8 @@ func (h *pipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := m.Unmarshal(b); err != nil {
 		h.lg.Warn(
 			"failed to unmarshal Raft message",
-			zap.String("local-member-id", h.localID.String()),
-			zap.Error(err),
+			logrus.WithField("local-member-id", h.localID.String()),
+			logrus.WithError(err),
 		)
 		http.Error(w, "error unmarshalling raft message", http.StatusBadRequest)
 		recvFailures.WithLabelValues(r.RemoteAddr).Inc()
@@ -145,8 +144,8 @@ func (h *pipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			h.lg.Warn(
 				"failed to process Raft message",
-				zap.String("local-member-id", h.localID.String()),
-				zap.Error(err),
+				logrus.WithField("local-member-id", h.localID.String()),
+				logrus.WithError(err),
 			)
 			http.Error(w, "error processing raft message", http.StatusInternalServerError)
 			w.(http.Flusher).Flush()
@@ -225,9 +224,9 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to decode raft message (%v)", err)
 		h.lg.Warn(
 			"failed to decode Raft message",
-			zap.String("local-member-id", h.localID.String()),
-			zap.String("remote-snapshot-sender-id", from),
-			zap.Error(err),
+			logrus.WithField("local-member-id", h.localID.String()),
+			logrus.WithField("remote-snapshot-sender-id", from),
+			logrus.WithError(err),
 		)
 		http.Error(w, msg, http.StatusBadRequest)
 		recvFailures.WithLabelValues(r.RemoteAddr).Inc()
@@ -241,9 +240,9 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m.Type != raftpb.MsgSnap {
 		h.lg.Warn(
 			"unexpected Raft message type",
-			zap.String("local-member-id", h.localID.String()),
-			zap.String("remote-snapshot-sender-id", from),
-			zap.String("message-type", m.Type.String()),
+			logrus.WithField("local-member-id", h.localID.String()),
+			logrus.WithField("remote-snapshot-sender-id", from),
+			logrus.WithField("message-type", m.Type.String()),
 		)
 		http.Error(w, "wrong raft message type", http.StatusBadRequest)
 		snapshotReceiveFailures.WithLabelValues(from).Inc()
@@ -257,11 +256,11 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.lg.Info(
 		"receiving database snapshot",
-		zap.String("local-member-id", h.localID.String()),
-		zap.String("remote-snapshot-sender-id", from),
-		zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
-		zap.Int("incoming-snapshot-message-size-bytes", msgSize),
-		zap.String("incoming-snapshot-message-size", humanize.Bytes(uint64(msgSize))),
+		logrus.WithField("local-member-id", h.localID.String()),
+		logrus.WithField("remote-snapshot-sender-id", from),
+		logrus.WithField("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+		logrus.WithField("incoming-snapshot-message-size-bytes", msgSize),
+		logrus.WithField("incoming-snapshot-message-size", humanize.Bytes(uint64(msgSize))),
 	)
 
 	// save incoming database snapshot.
@@ -271,10 +270,10 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to save KV snapshot (%v)", err)
 		h.lg.Warn(
 			"failed to save incoming database snapshot",
-			zap.String("local-member-id", h.localID.String()),
-			zap.String("remote-snapshot-sender-id", from),
-			zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
-			zap.Error(err),
+			logrus.WithField("local-member-id", h.localID.String()),
+			logrus.WithField("remote-snapshot-sender-id", from),
+			logrus.WithField("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+			logrus.WithError(err),
 		)
 		http.Error(w, msg, http.StatusInternalServerError)
 		snapshotReceiveFailures.WithLabelValues(from).Inc()
@@ -286,12 +285,12 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	downloadTook := time.Since(start)
 	h.lg.Info(
 		"received and saved database snapshot",
-		zap.String("local-member-id", h.localID.String()),
-		zap.String("remote-snapshot-sender-id", from),
-		zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
-		zap.Int64("incoming-snapshot-size-bytes", n),
-		zap.String("incoming-snapshot-size", humanize.Bytes(uint64(n))),
-		zap.String("download-took", downloadTook.String()),
+		logrus.WithField("local-member-id", h.localID.String()),
+		logrus.WithField("remote-snapshot-sender-id", from),
+		logrus.WithField("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+		logrus.WithField("incoming-snapshot-size-bytes", n),
+		logrus.WithField("incoming-snapshot-size", humanize.Bytes(uint64(n))),
+		logrus.WithField("download-took", downloadTook.String()),
 	)
 
 	if err := h.r.Process(context.TODO(), m); err != nil {
@@ -304,9 +303,9 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			msg := fmt.Sprintf("failed to process raft message (%v)", err)
 			h.lg.Warn(
 				"failed to process Raft message",
-				zap.String("local-member-id", h.localID.String()),
-				zap.String("remote-snapshot-sender-id", from),
-				zap.Error(err),
+				logrus.WithField("local-member-id", h.localID.String()),
+				logrus.WithField("remote-snapshot-sender-id", from),
+				logrus.WithError(err),
 			)
 			http.Error(w, msg, http.StatusInternalServerError)
 			snapshotReceiveFailures.WithLabelValues(from).Inc()
@@ -370,9 +369,9 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.lg.Debug(
 			"ignored unexpected streaming request path",
-			zap.String("local-member-id", h.tr.ID.String()),
-			zap.String("remote-peer-id-stream-handler", h.id.String()),
-			zap.String("path", r.URL.Path),
+			logrus.WithField("local-member-id", h.tr.ID.String()),
+			logrus.WithField("remote-peer-id-stream-handler", h.id.String()),
+			logrus.WithField("path", r.URL.Path),
 		)
 		http.Error(w, "invalid path", http.StatusNotFound)
 		return
@@ -383,10 +382,10 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.lg.Warn(
 			"failed to parse path into ID",
-			zap.String("local-member-id", h.tr.ID.String()),
-			zap.String("remote-peer-id-stream-handler", h.id.String()),
-			zap.String("path", fromStr),
-			zap.Error(err),
+			logrus.WithField("local-member-id", h.tr.ID.String()),
+			logrus.WithField("remote-peer-id-stream-handler", h.id.String()),
+			logrus.WithField("path", fromStr),
+			logrus.WithError(err),
 		)
 		http.Error(w, "invalid from", http.StatusNotFound)
 		return
@@ -394,9 +393,9 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.r.IsIDRemoved(uint64(from)) {
 		h.lg.Warn(
 			"rejected stream from remote peer because it was removed",
-			zap.String("local-member-id", h.tr.ID.String()),
-			zap.String("remote-peer-id-stream-handler", h.id.String()),
-			zap.String("remote-peer-id-from", from.String()),
+			logrus.WithField("local-member-id", h.tr.ID.String()),
+			logrus.WithField("remote-peer-id-stream-handler", h.id.String()),
+			logrus.WithField("remote-peer-id-from", from.String()),
 		)
 		http.Error(w, "removed member", http.StatusGone)
 		return
@@ -413,10 +412,10 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.lg.Warn(
 			"failed to find remote peer in cluster",
-			zap.String("local-member-id", h.tr.ID.String()),
-			zap.String("remote-peer-id-stream-handler", h.id.String()),
-			zap.String("remote-peer-id-from", from.String()),
-			zap.String("cluster-id", h.cid.String()),
+			logrus.WithField("local-member-id", h.tr.ID.String()),
+			logrus.WithField("remote-peer-id-stream-handler", h.id.String()),
+			logrus.WithField("remote-peer-id-from", from.String()),
+			logrus.WithField("cluster-id", h.cid.String()),
 		)
 		http.Error(w, "error sender not found", http.StatusNotFound)
 		return
@@ -426,11 +425,11 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if gto := r.Header.Get("X-Raft-To"); gto != wto {
 		h.lg.Warn(
 			"ignored streaming request; ID mismatch",
-			zap.String("local-member-id", h.tr.ID.String()),
-			zap.String("remote-peer-id-stream-handler", h.id.String()),
-			zap.String("remote-peer-id-header", gto),
-			zap.String("remote-peer-id-from", from.String()),
-			zap.String("cluster-id", h.cid.String()),
+			logrus.WithField("local-member-id", h.tr.ID.String()),
+			logrus.WithField("remote-peer-id-stream-handler", h.id.String()),
+			logrus.WithField("remote-peer-id-header", gto),
+			logrus.WithField("remote-peer-id-from", from.String()),
+			logrus.WithField("cluster-id", h.cid.String()),
 		)
 		http.Error(w, "to field mismatch", http.StatusPreconditionFailed)
 		return
@@ -486,28 +485,28 @@ func checkClusterCompatibilityFromHeader(lg *logrus.Logger, localID types.ID, he
 	if err != nil {
 		lg.Warn(
 			"failed to check version compatibility",
-			zap.String("local-member-id", localID.String()),
-			zap.String("local-member-cluster-id", cid.String()),
-			zap.String("local-member-server-version", localVs),
-			zap.String("local-member-server-minimum-cluster-version", localMinClusterVs),
-			zap.String("remote-peer-server-name", remoteName),
-			zap.String("remote-peer-server-version", remoteVs),
-			zap.String("remote-peer-server-minimum-cluster-version", remoteMinClusterVs),
-			zap.Error(err),
+			logrus.WithField("local-member-id", localID.String()),
+			logrus.WithField("local-member-cluster-id", cid.String()),
+			logrus.WithField("local-member-server-version", localVs),
+			logrus.WithField("local-member-server-minimum-cluster-version", localMinClusterVs),
+			logrus.WithField("remote-peer-server-name", remoteName),
+			logrus.WithField("remote-peer-server-version", remoteVs),
+			logrus.WithField("remote-peer-server-minimum-cluster-version", remoteMinClusterVs),
+			logrus.WithError(err),
 		)
 		return errIncompatibleVersion
 	}
 	if gcid := header.Get("X-Etcd-Cluster-ID"); gcid != cid.String() {
 		lg.Warn(
 			"request cluster ID mismatch",
-			zap.String("local-member-id", localID.String()),
-			zap.String("local-member-cluster-id", cid.String()),
-			zap.String("local-member-server-version", localVs),
-			zap.String("local-member-server-minimum-cluster-version", localMinClusterVs),
-			zap.String("remote-peer-server-name", remoteName),
-			zap.String("remote-peer-server-version", remoteVs),
-			zap.String("remote-peer-server-minimum-cluster-version", remoteMinClusterVs),
-			zap.String("remote-peer-cluster-id", gcid),
+			logrus.WithField("local-member-id", localID.String()),
+			logrus.WithField("local-member-cluster-id", cid.String()),
+			logrus.WithField("local-member-server-version", localVs),
+			logrus.WithField("local-member-server-minimum-cluster-version", localMinClusterVs),
+			logrus.WithField("remote-peer-server-name", remoteName),
+			logrus.WithField("remote-peer-server-version", remoteVs),
+			logrus.WithField("remote-peer-server-minimum-cluster-version", remoteMinClusterVs),
+			logrus.WithField("remote-peer-cluster-id", gcid),
 		)
 		return errClusterIDMismatch
 	}

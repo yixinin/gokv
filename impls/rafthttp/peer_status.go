@@ -22,8 +22,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/types"
-
-	"go.uber.org/zap"
 )
 
 type failureType struct {
@@ -51,7 +49,7 @@ func (s *peerStatus) activate() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.active {
-		s.lg.Info("peer became active", zap.String("peer-id", s.id.String()))
+		s.lg.Info("peer became active", logrus.WithField("peer-id", s.id.String()))
 		s.active = true
 		s.since = time.Now()
 
@@ -64,7 +62,7 @@ func (s *peerStatus) deactivate(failure failureType, reason string) {
 	defer s.mu.Unlock()
 	msg := fmt.Sprintf("failed to %s %s on %s (%s)", failure.action, s.id, failure.source, reason)
 	if s.active {
-		s.lg.Warn("peer became inactive (message send to peer failed)", zap.String("peer-id", s.id.String()), zap.Error(errors.New(msg)))
+		s.lg.Warn("peer became inactive (message send to peer failed)", logrus.WithField("peer-id", s.id.String()), logrus.WithError(errors.New(msg)))
 		s.active = false
 		s.since = time.Time{}
 
@@ -74,7 +72,7 @@ func (s *peerStatus) deactivate(failure failureType, reason string) {
 	}
 
 	if s.lg != nil {
-		s.lg.Debug("peer deactivated again", zap.String("peer-id", s.id.String()), zap.Error(errors.New(msg)))
+		s.lg.Debug("peer deactivated again", logrus.WithField("peer-id", s.id.String()), logrus.WithError(errors.New(msg)))
 	}
 }
 

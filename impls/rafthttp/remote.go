@@ -18,8 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-
-	"go.uber.org/zap"
 )
 
 type remote struct {
@@ -60,22 +58,22 @@ func (g *remote) send(m raftpb.Message) {
 			if g.lg != nil {
 				g.lg.Warn(
 					"dropped internal Raft message since sending buffer is full (overloaded network)",
-					zap.String("message-type", m.Type.String()),
-					zap.String("local-member-id", g.localID.String()),
-					zap.String("from", types.ID(m.From).String()),
-					zap.String("remote-peer-id", g.id.String()),
-					zap.Bool("remote-peer-active", g.status.isActive()),
+					logrus.WithField("message-type", m.Type.String()),
+					logrus.WithField("local-member-id", g.localID.String()),
+					logrus.WithField("from", types.ID(m.From).String()),
+					logrus.WithField("remote-peer-id", g.id.String()),
+					logrus.WithField("remote-peer-active", g.status.isActive()),
 				)
 			}
 		} else {
 			if g.lg != nil {
 				g.lg.Warn(
 					"dropped Raft message since sending buffer is full (overloaded network)",
-					zap.String("message-type", m.Type.String()),
-					zap.String("local-member-id", g.localID.String()),
-					zap.String("from", types.ID(m.From).String()),
-					zap.String("remote-peer-id", g.id.String()),
-					zap.Bool("remote-peer-active", g.status.isActive()),
+					logrus.WithField("message-type", m.Type.String()),
+					logrus.WithField("local-member-id", g.localID.String()),
+					logrus.WithField("from", types.ID(m.From).String()),
+					logrus.WithField("remote-peer-id", g.id.String()),
+					logrus.WithField("remote-peer-active", g.status.isActive()),
 				)
 			}
 		}

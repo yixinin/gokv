@@ -29,7 +29,6 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 
 	"github.com/coreos/go-semver/semver"
-	"go.uber.org/zap"
 )
 
 var (
@@ -68,7 +67,7 @@ func createPostRequest(lg *logrus.Logger, u url.URL, path string, body io.Reader
 	req, err := http.NewRequest("POST", uu.String(), body)
 	if err != nil {
 		if lg != nil {
-			lg.Panic("unexpected new request error", zap.Error(err))
+			lg.Panic("unexpected new request error", logrus.WithError(err))
 		}
 	}
 	req.Header.Set("Content-Type", ct)
@@ -91,7 +90,7 @@ func checkPostResponse(lg *logrus.Logger, resp *http.Response, body []byte, req 
 			if lg != nil {
 				lg.Error(
 					"request sent was ignored by peer",
-					zap.String("remote-peer-id", to.String()),
+					logrus.WithField("remote-peer-id", to.String()),
 				)
 			}
 			return errIncompatibleVersion
@@ -99,9 +98,9 @@ func checkPostResponse(lg *logrus.Logger, resp *http.Response, body []byte, req 
 			if lg != nil {
 				lg.Error(
 					"request sent was ignored due to cluster ID mismatch",
-					zap.String("remote-peer-id", to.String()),
-					zap.String("remote-peer-cluster-id", resp.Header.Get("X-Etcd-Cluster-ID")),
-					zap.String("local-member-cluster-id", req.Header.Get("X-Etcd-Cluster-ID")),
+					logrus.WithField("remote-peer-id", to.String()),
+					logrus.WithField("remote-peer-cluster-id", resp.Header.Get("X-Etcd-Cluster-ID")),
+					logrus.WithField("local-member-cluster-id", req.Header.Get("X-Etcd-Cluster-ID")),
 				)
 			}
 			return errClusterIDMismatch

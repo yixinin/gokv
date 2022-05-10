@@ -21,12 +21,7 @@ type Server struct {
 	errorC     <-chan error
 }
 
-func NewServer(db kvstore.Kvstore,
-	snapShoter *snap.Snapshotter,
-	proposeC chan string,
-	commitC <-chan *commit,
-	errorC <-chan error,
-) *Server {
+func NewServer(db kvstore.Kvstore) *Server {
 	return &Server{
 		_hashImpl: &_hashImpl{_db: db},
 		_setImpl:  &_setImpl{_db: db},

@@ -34,7 +34,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
 	"github.com/coreos/go-semver/semver"
-	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -73,7 +72,7 @@ func (t streamType) endpoint(lg *logrus.Logger) string {
 		return path.Join(RaftStreamPrefix, "message")
 	default:
 		if lg != nil {
-			lg.Panic("unhandled stream type", zap.String("stream-type", t.String()))
+			lg.Panic("unhandled stream type", logrus.WithField("stream-type", t.String()))
 		}
 		return ""
 	}
@@ -169,8 +168,8 @@ func (cw *streamWriter) run() {
 	if cw.lg != nil {
 		cw.lg.Info(
 			"started stream writer with remote peer",
-			zap.String("local-member-id", cw.localID.String()),
-			zap.String("remote-peer-id", cw.peerID.String()),
+			logrus.WithField("local-member-id", cw.localID.String()),
+			logrus.WithField("remote-peer-id", cw.peerID.String()),
 		)
 	}
 
@@ -194,9 +193,9 @@ func (cw *streamWriter) run() {
 			if cw.lg != nil {
 				cw.lg.Warn(
 					"lost TCP streaming connection with remote peer",
-					zap.String("stream-writer-type", t.String()),
-					zap.String("local-member-id", cw.localID.String()),
-					zap.String("remote-peer-id", cw.peerID.String()),
+					logrus.WithField("stream-writer-type", t.String()),
+					logrus.WithField("local-member-id", cw.localID.String()),
+					logrus.WithField("remote-peer-id", cw.peerID.String()),
 				)
 			}
 			heartbeatc, msgc = nil, nil
@@ -223,9 +222,9 @@ func (cw *streamWriter) run() {
 			if cw.lg != nil {
 				cw.lg.Warn(
 					"lost TCP streaming connection with remote peer",
-					zap.String("stream-writer-type", t.String()),
-					zap.String("local-member-id", cw.localID.String()),
-					zap.String("remote-peer-id", cw.peerID.String()),
+					logrus.WithField("stream-writer-type", t.String()),
+					logrus.WithField("local-member-id", cw.localID.String()),
+					logrus.WithField("remote-peer-id", cw.peerID.String()),
 				)
 			}
 			heartbeatc, msgc = nil, nil
@@ -243,15 +242,15 @@ func (cw *streamWriter) run() {
 				enc = &messageEncoder{w: conn.Writer}
 			default:
 				if cw.lg != nil {
-					cw.lg.Panic("unhandled stream type", zap.String("stream-type", t.String()))
+					cw.lg.Panic("unhandled stream type", logrus.WithField("stream-type", t.String()))
 				}
 			}
 			if cw.lg != nil {
 				cw.lg.Info(
 					"set message encoder",
-					zap.String("from", conn.localID.String()),
-					zap.String("to", conn.peerID.String()),
-					zap.String("stream-type", t.String()),
+					logrus.WithField("from", conn.localID.String()),
+					logrus.WithField("to", conn.peerID.String()),
+					logrus.WithField("stream-type", t.String()),
 				)
 			}
 			flusher = conn.Flusher
@@ -265,18 +264,18 @@ func (cw *streamWriter) run() {
 				if cw.lg != nil {
 					cw.lg.Warn(
 						"closed TCP streaming connection with remote peer",
-						zap.String("stream-writer-type", t.String()),
-						zap.String("local-member-id", cw.localID.String()),
-						zap.String("remote-peer-id", cw.peerID.String()),
+						logrus.WithField("stream-writer-type", t.String()),
+						logrus.WithField("local-member-id", cw.localID.String()),
+						logrus.WithField("remote-peer-id", cw.peerID.String()),
 					)
 				}
 			}
 			if cw.lg != nil {
 				cw.lg.Info(
 					"established TCP streaming connection with remote peer",
-					zap.String("stream-writer-type", t.String()),
-					zap.String("local-member-id", cw.localID.String()),
-					zap.String("remote-peer-id", cw.peerID.String()),
+					logrus.WithField("stream-writer-type", t.String()),
+					logrus.WithField("local-member-id", cw.localID.String()),
+					logrus.WithField("remote-peer-id", cw.peerID.String()),
 				)
 			}
 			heartbeatc, msgc = tickc.C, cw.msgc
@@ -286,16 +285,16 @@ func (cw *streamWriter) run() {
 				if cw.lg != nil {
 					cw.lg.Warn(
 						"closed TCP streaming connection with remote peer",
-						zap.String("stream-writer-type", t.String()),
-						zap.String("remote-peer-id", cw.peerID.String()),
+						logrus.WithField("stream-writer-type", t.String()),
+						logrus.WithField("remote-peer-id", cw.peerID.String()),
 					)
 				}
 			}
 			if cw.lg != nil {
 				cw.lg.Info(
 					"stopped TCP streaming connection with remote peer",
-					zap.String("stream-writer-type", t.String()),
-					zap.String("remote-peer-id", cw.peerID.String()),
+					logrus.WithField("stream-writer-type", t.String()),
+					logrus.WithField("remote-peer-id", cw.peerID.String()),
 				)
 			}
 			close(cw.done)
@@ -324,8 +323,8 @@ func (cw *streamWriter) closeUnlocked() bool {
 		if cw.lg != nil {
 			cw.lg.Warn(
 				"failed to close connection with remote peer",
-				zap.String("remote-peer-id", cw.peerID.String()),
-				zap.Error(err),
+				logrus.WithField("remote-peer-id", cw.peerID.String()),
+				logrus.WithError(err),
 			)
 		}
 	}
@@ -395,9 +394,9 @@ func (cr *streamReader) run() {
 	if cr.lg != nil {
 		cr.lg.Info(
 			"started stream reader with remote peer",
-			zap.String("stream-reader-type", t.String()),
-			zap.String("local-member-id", cr.tr.ID.String()),
-			zap.String("remote-peer-id", cr.peerID.String()),
+			logrus.WithField("stream-reader-type", t.String()),
+			logrus.WithField("local-member-id", cr.tr.ID.String()),
+			logrus.WithField("remote-peer-id", cr.peerID.String()),
 		)
 	}
 
@@ -412,19 +411,19 @@ func (cr *streamReader) run() {
 			if cr.lg != nil {
 				cr.lg.Info(
 					"established TCP streaming connection with remote peer",
-					zap.String("stream-reader-type", cr.typ.String()),
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
+					logrus.WithField("stream-reader-type", cr.typ.String()),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
 				)
 			}
 			err = cr.decodeLoop(rc, t)
 			if cr.lg != nil {
 				cr.lg.Warn(
 					"lost TCP streaming connection with remote peer",
-					zap.String("stream-reader-type", cr.typ.String()),
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
-					zap.Error(err),
+					logrus.WithField("stream-reader-type", cr.typ.String()),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
+					logrus.WithError(err),
 				)
 			}
 			switch {
@@ -442,9 +441,9 @@ func (cr *streamReader) run() {
 			if cr.lg != nil {
 				cr.lg.Info(
 					"stopped stream reader with remote peer",
-					zap.String("stream-reader-type", t.String()),
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
+					logrus.WithField("stream-reader-type", t.String()),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
 				)
 			}
 			close(cr.done)
@@ -454,10 +453,10 @@ func (cr *streamReader) run() {
 			if cr.lg != nil {
 				cr.lg.Warn(
 					"rate limit on stream reader with remote peer",
-					zap.String("stream-reader-type", t.String()),
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
-					zap.Error(err),
+					logrus.WithField("stream-reader-type", t.String()),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
+					logrus.WithError(err),
 				)
 			}
 		}
@@ -474,7 +473,7 @@ func (cr *streamReader) decodeLoop(rc io.ReadCloser, t streamType) error {
 		dec = &messageDecoder{r: rc}
 	default:
 		if cr.lg != nil {
-			cr.lg.Panic("unknown stream type", zap.String("type", t.String()))
+			cr.lg.Panic("unknown stream type", logrus.WithField("type", t.String()))
 		}
 	}
 	select {
@@ -530,22 +529,22 @@ func (cr *streamReader) decodeLoop(rc io.ReadCloser, t streamType) error {
 				if cr.lg != nil {
 					cr.lg.Warn(
 						"dropped internal Raft message since receiving buffer is full (overloaded network)",
-						zap.String("message-type", m.Type.String()),
-						zap.String("local-member-id", cr.tr.ID.String()),
-						zap.String("from", types.ID(m.From).String()),
-						zap.String("remote-peer-id", types.ID(m.To).String()),
-						zap.Bool("remote-peer-active", cr.status.isActive()),
+						logrus.WithField("message-type", m.Type.String()),
+						logrus.WithField("local-member-id", cr.tr.ID.String()),
+						logrus.WithField("from", types.ID(m.From).String()),
+						logrus.WithField("remote-peer-id", types.ID(m.To).String()),
+						logrus.WithField("remote-peer-active", cr.status.isActive()),
 					)
 				}
 			} else {
 				if cr.lg != nil {
 					cr.lg.Warn(
 						"dropped Raft message since receiving buffer is full (overloaded network)",
-						zap.String("message-type", m.Type.String()),
-						zap.String("local-member-id", cr.tr.ID.String()),
-						zap.String("from", types.ID(m.From).String()),
-						zap.String("remote-peer-id", types.ID(m.To).String()),
-						zap.Bool("remote-peer-active", cr.status.isActive()),
+						logrus.WithField("message-type", m.Type.String()),
+						logrus.WithField("local-member-id", cr.tr.ID.String()),
+						logrus.WithField("from", types.ID(m.From).String()),
+						logrus.WithField("remote-peer-id", types.ID(m.To).String()),
+						logrus.WithField("remote-peer-active", cr.status.isActive()),
 					)
 				}
 			}
@@ -570,9 +569,9 @@ func (cr *streamReader) dial(t streamType) (io.ReadCloser, error) {
 	if cr.lg != nil {
 		cr.lg.Debug(
 			"dial stream reader",
-			zap.String("from", cr.tr.ID.String()),
-			zap.String("to", cr.peerID.String()),
-			zap.String("address", uu.String()),
+			logrus.WithField("from", cr.tr.ID.String()),
+			logrus.WithField("to", cr.peerID.String()),
+			logrus.WithField("address", uu.String()),
 		)
 	}
 	req, err := http.NewRequest("GET", uu.String(), nil)
@@ -642,9 +641,9 @@ func (cr *streamReader) dial(t streamType) (io.ReadCloser, error) {
 			if cr.lg != nil {
 				cr.lg.Warn(
 					"request sent was ignored by remote peer due to server version incompatibility",
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
-					zap.Error(errIncompatibleVersion),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
+					logrus.WithError(errIncompatibleVersion),
 				)
 			}
 			return nil, errIncompatibleVersion
@@ -653,11 +652,11 @@ func (cr *streamReader) dial(t streamType) (io.ReadCloser, error) {
 			if cr.lg != nil {
 				cr.lg.Warn(
 					"request sent was ignored by remote peer due to cluster ID mismatch",
-					zap.String("remote-peer-id", cr.peerID.String()),
-					zap.String("remote-peer-cluster-id", resp.Header.Get("X-Etcd-Cluster-ID")),
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("local-member-cluster-id", cr.tr.ClusterID.String()),
-					zap.Error(errClusterIDMismatch),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
+					logrus.WithField("remote-peer-cluster-id", resp.Header.Get("X-Etcd-Cluster-ID")),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("local-member-cluster-id", cr.tr.ClusterID.String()),
+					logrus.WithError(errClusterIDMismatch),
 				)
 			}
 			return nil, errClusterIDMismatch
@@ -679,9 +678,9 @@ func (cr *streamReader) close() {
 			if cr.lg != nil {
 				cr.lg.Warn(
 					"failed to close remote peer connection",
-					zap.String("local-member-id", cr.tr.ID.String()),
-					zap.String("remote-peer-id", cr.peerID.String()),
-					zap.Error(err),
+					logrus.WithField("local-member-id", cr.tr.ID.String()),
+					logrus.WithField("remote-peer-id", cr.peerID.String()),
+					logrus.WithError(err),
 				)
 			}
 		}

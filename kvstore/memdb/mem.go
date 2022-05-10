@@ -69,3 +69,7 @@ func (m *memdb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
 func NewStorage() kvstore.Kvstore {
 	return &memdb{}
 }
+
+func init() {
+	kvstore.NewMemDB = NewStorage
+}

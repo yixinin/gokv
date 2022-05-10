@@ -21,9 +21,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-
-	"go.uber.org/zap"
 )
 
 var ErrNoDBSnapshot = errors.New("snap: snapshot file doesn't exist")
@@ -72,9 +71,9 @@ func (s *Snapshotter) DBFilePath(id uint64) (string, error) {
 	if s.lg != nil {
 		s.lg.Warn(
 			"failed to find [SNAPSHOT-INDEX].snap.db",
-			zap.Uint64("snapshot-index", id),
-			zap.String("snapshot-file-path", fn),
-			zap.Error(ErrNoDBSnapshot),
+			logrus.WithField("snapshot-index", id),
+			logrus.WithField("snapshot-file-path", fn),
+			logrus.WithError(ErrNoDBSnapshot),
 		)
 	}
 	return "", ErrNoDBSnapshot

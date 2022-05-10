@@ -62,11 +62,11 @@ func newRaft() {
 	defer close(confChangeC)
 
 	// raft provides a commit stream for the proposals from the http api
-	var kvs *gokv.Server
+	var kvs *gokv.KvEngine
 	getSnapshot := func(ctx context.Context) ([]byte, error) { return kvs.GetSnapshot(ctx) }
 	commitC, errorC, snapshotterReady := gokv.NewRaftNode(*id, strings.Split(*cluster, ","), *join, getSnapshot, proposeC, confChangeC)
-	var db = memdb.NewStorage()
-	kvs = gokv.NewServer(db, <-snapshotterReady, proposeC, commitC, errorC)
+	var dataPath = "memdb"
+	kvs = gokv.NewKvEngine(dataPath, <-snapshotterReady, proposeC, commitC, errorC)
 
 	kvs.Run(context.Background())
 }

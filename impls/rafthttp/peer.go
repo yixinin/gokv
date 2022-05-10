@@ -26,7 +26,6 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
-	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -131,11 +130,11 @@ type peer struct {
 
 func startPeer(t *Transport, urls types.URLs, peerID types.ID, fs *stats.FollowerStats) *peer {
 	if t.Logger != nil {
-		t.Logger.Info("starting remote peer", zap.String("remote-peer-id", peerID.String()))
+		t.Logger.Info("starting remote peer", logrus.WithField("remote-peer-id", peerID.String()))
 	}
 	defer func() {
 		if t.Logger != nil {
-			t.Logger.Info("started remote peer", zap.String("remote-peer-id", peerID.String()))
+			t.Logger.Info("started remote peer", logrus.WithField("remote-peer-id", peerID.String()))
 		}
 	}()
 
@@ -178,7 +177,7 @@ func startPeer(t *Transport, urls types.URLs, peerID types.ID, fs *stats.Followe
 			case mm := <-p.recvc:
 				if err := r.Process(ctx, mm); err != nil {
 					if t.Logger != nil {
-						t.Logger.Warn("failed to process Raft message", zap.Error(err))
+						t.Logger.Warn("failed to process Raft message", logrus.WithError(err))
 					}
 				}
 			case <-p.stopc:
@@ -196,7 +195,7 @@ func startPeer(t *Transport, urls types.URLs, peerID types.ID, fs *stats.Followe
 			case mm := <-p.propc:
 				if err := r.Process(ctx, mm); err != nil {
 					if t.Logger != nil {
-						t.Logger.Warn("failed to process Raft message", zap.Error(err))
+						t.Logger.Warn("failed to process Raft message", logrus.WithError(err))
 					}
 				}
 			case <-p.stopc:
@@ -255,24 +254,24 @@ func (p *peer) send(m raftpb.Message) {
 			if p.lg != nil {
 				p.lg.Warn(
 					"dropped internal Raft message since sending buffer is full (overloaded network)",
-					zap.String("message-type", m.Type.String()),
-					zap.String("local-member-id", p.localID.String()),
-					zap.String("from", types.ID(m.From).String()),
-					zap.String("remote-peer-id", p.id.String()),
-					zap.String("remote-peer-name", name),
-					zap.Bool("remote-peer-active", p.status.isActive()),
+					logrus.WithField("message-type", m.Type.String()),
+					logrus.WithField("local-member-id", p.localID.String()),
+					logrus.WithField("from", types.ID(m.From).String()),
+					logrus.WithField("remote-peer-id", p.id.String()),
+					logrus.WithField("remote-peer-name", name),
+					logrus.WithField("remote-peer-active", p.status.isActive()),
 				)
 			}
 		} else {
 			if p.lg != nil {
 				p.lg.Warn(
 					"dropped internal Raft message since sending buffer is full (overloaded network)",
-					zap.String("message-type", m.Type.String()),
-					zap.String("local-member-id", p.localID.String()),
-					zap.String("from", types.ID(m.From).String()),
-					zap.String("remote-peer-id", p.id.String()),
-					zap.String("remote-peer-name", name),
-					zap.Bool("remote-peer-active", p.status.isActive()),
+					logrus.WithField("message-type", m.Type.String()),
+					logrus.WithField("local-member-id", p.localID.String()),
+					logrus.WithField("from", types.ID(m.From).String()),
+					logrus.WithField("remote-peer-id", p.id.String()),
+					logrus.WithField("remote-peer-name", name),
+					logrus.WithField("remote-peer-active", p.status.isActive()),
 				)
 			}
 		}
@@ -297,7 +296,7 @@ func (p *peer) attachOutgoingConn(conn *outgoingConn) {
 		ok = p.writer.attach(conn)
 	default:
 		if p.lg != nil {
-			p.lg.Panic("unknown stream type", zap.String("type", conn.t.String()))
+			p.lg.Panic("unknown stream type", logrus.WithField("type", conn.t.String()))
 		}
 	}
 	if !ok {
@@ -328,12 +327,12 @@ func (p *peer) Resume() {
 
 func (p *peer) stop() {
 	if p.lg != nil {
-		p.lg.Info("stopping remote peer", zap.String("remote-peer-id", p.id.String()))
+		p.lg.Info("stopping remote peer", logrus.WithField("remote-peer-id", p.id.String()))
 	}
 
 	defer func() {
 		if p.lg != nil {
-			p.lg.Info("stopped remote peer", zap.String("remote-peer-id", p.id.String()))
+			p.lg.Info("stopped remote peer", logrus.WithField("remote-peer-id", p.id.String()))
 		}
 	}()
 

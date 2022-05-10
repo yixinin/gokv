@@ -30,7 +30,6 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 
 	"github.com/dustin/go-humanize"
-	"go.uber.org/zap"
 )
 
 var (
@@ -84,10 +83,10 @@ func (s *snapshotSender) send(merged snap.Message) {
 	if s.tr.Logger != nil {
 		s.tr.Logger.Info(
 			"sending database snapshot",
-			zap.Uint64("snapshot-index", m.Snapshot.Metadata.Index),
-			zap.String("remote-peer-id", to),
-			zap.Uint64("bytes", snapshotSizeVal),
-			zap.String("size", snapshotSize),
+			logrus.WithField("snapshot-index", m.Snapshot.Metadata.Index),
+			logrus.WithField("remote-peer-id", to),
+			logrus.WithField("bytes", snapshotSizeVal),
+			logrus.WithField("size", snapshotSize),
 		)
 	}
 
@@ -102,11 +101,11 @@ func (s *snapshotSender) send(merged snap.Message) {
 		if s.tr.Logger != nil {
 			s.tr.Logger.Warn(
 				"failed to send database snapshot",
-				zap.Uint64("snapshot-index", m.Snapshot.Metadata.Index),
-				zap.String("remote-peer-id", to),
-				zap.Uint64("bytes", snapshotSizeVal),
-				zap.String("size", snapshotSize),
-				zap.Error(err),
+				logrus.WithField("snapshot-index", m.Snapshot.Metadata.Index),
+				logrus.WithField("remote-peer-id", to),
+				logrus.WithField("bytes", snapshotSizeVal),
+				logrus.WithField("size", snapshotSize),
+				logrus.WithError(err),
 			)
 		}
 
@@ -133,10 +132,10 @@ func (s *snapshotSender) send(merged snap.Message) {
 	if s.tr.Logger != nil {
 		s.tr.Logger.Info(
 			"sent database snapshot",
-			zap.Uint64("snapshot-index", m.Snapshot.Metadata.Index),
-			zap.String("remote-peer-id", to),
-			zap.Uint64("bytes", snapshotSizeVal),
-			zap.String("size", snapshotSize),
+			logrus.WithField("snapshot-index", m.Snapshot.Metadata.Index),
+			logrus.WithField("remote-peer-id", to),
+			logrus.WithField("bytes", snapshotSizeVal),
+			logrus.WithField("size", snapshotSize),
 		)
 	}
 
@@ -191,7 +190,7 @@ func createSnapBody(lg *logrus.Logger, merged snap.Message) io.ReadCloser {
 	// encode raft message
 	if err := enc.encode(&merged.Message); err != nil {
 		if lg != nil {
-			lg.Panic("failed to encode message", zap.Error(err))
+			lg.Panic("failed to encode message", logrus.WithError(err))
 		}
 	}
 

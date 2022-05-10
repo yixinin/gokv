@@ -29,7 +29,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 
 	"github.com/xiang90/probing"
-	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -201,8 +200,8 @@ func (t *Transport) Send(msgs []raftpb.Message) {
 		if t.Logger != nil {
 			t.Logger.Debug(
 				"ignored message send request; unknown remote peer target",
-				zap.String("type", m.Type.String()),
-				zap.String("unknown-target-peer-id", to.String()),
+				logrus.WithField("type", m.Type.String()),
+				logrus.WithField("unknown-target-peer-id", to.String()),
 			)
 		}
 	}
@@ -277,7 +276,7 @@ func (t *Transport) AddRemote(id types.ID, us []string) {
 	urls, err := types.NewURLs(us)
 	if err != nil {
 		if t.Logger != nil {
-			t.Logger.Panic("failed NewURLs", zap.Strings("urls", us), zap.Error(err))
+			t.Logger.Panic("failed NewURLs", logrus.WithField("urls", us), logrus.WithError(err))
 		}
 	}
 	t.remotes[id] = startRemote(t, urls, id)
@@ -285,9 +284,9 @@ func (t *Transport) AddRemote(id types.ID, us []string) {
 	if t.Logger != nil {
 		t.Logger.Info(
 			"added new remote peer",
-			zap.String("local-member-id", t.ID.String()),
-			zap.String("remote-peer-id", id.String()),
-			zap.Strings("remote-peer-urls", us),
+			logrus.WithField("local-member-id", t.ID.String()),
+			logrus.WithField("remote-peer-id", id.String()),
+			logrus.WithField("remote-peer-urls", us),
 		)
 	}
 }
@@ -305,7 +304,7 @@ func (t *Transport) AddPeer(id types.ID, us []string) {
 	urls, err := types.NewURLs(us)
 	if err != nil {
 		if t.Logger != nil {
-			t.Logger.Panic("failed NewURLs", zap.Strings("urls", us), zap.Error(err))
+			t.Logger.Panic("failed NewURLs", logrus.WithField("urls", us), logrus.WithError(err))
 		}
 	}
 	fs := t.LeaderStats.Follower(id.String())
@@ -316,9 +315,9 @@ func (t *Transport) AddPeer(id types.ID, us []string) {
 	if t.Logger != nil {
 		t.Logger.Info(
 			"added remote peer",
-			zap.String("local-member-id", t.ID.String()),
-			zap.String("remote-peer-id", id.String()),
-			zap.Strings("remote-peer-urls", us),
+			logrus.WithField("local-member-id", t.ID.String()),
+			logrus.WithField("remote-peer-id", id.String()),
+			logrus.WithField("remote-peer-urls", us),
 		)
 	}
 }
@@ -343,7 +342,7 @@ func (t *Transport) removePeer(id types.ID) {
 		peer.stop()
 	} else {
 		if t.Logger != nil {
-			t.Logger.Panic("unexpected removal of unknown remote peer", zap.String("remote-peer-id", id.String()))
+			t.Logger.Panic("unexpected removal of unknown remote peer", logrus.WithField("remote-peer-id", id.String()))
 		}
 	}
 	delete(t.peers, id)
@@ -354,8 +353,8 @@ func (t *Transport) removePeer(id types.ID) {
 	if t.Logger != nil {
 		t.Logger.Info(
 			"removed remote peer",
-			zap.String("local-member-id", t.ID.String()),
-			zap.String("removed-remote-peer-id", id.String()),
+			logrus.WithField("local-member-id", t.ID.String()),
+			logrus.WithField("removed-remote-peer-id", id.String()),
 		)
 	}
 }
@@ -370,7 +369,7 @@ func (t *Transport) UpdatePeer(id types.ID, us []string) {
 	urls, err := types.NewURLs(us)
 	if err != nil {
 		if t.Logger != nil {
-			t.Logger.Panic("failed NewURLs", zap.Strings("urls", us), zap.Error(err))
+			t.Logger.Panic("failed NewURLs", logrus.WithField("urls", us), logrus.WithError(err))
 		}
 	}
 	t.peers[id].update(urls)
@@ -383,9 +382,9 @@ func (t *Transport) UpdatePeer(id types.ID, us []string) {
 	if t.Logger != nil {
 		t.Logger.Info(
 			"updated remote peer",
-			zap.String("local-member-id", t.ID.String()),
-			zap.String("updated-remote-peer-id", id.String()),
-			zap.Strings("updated-remote-peer-urls", us),
+			logrus.WithField("local-member-id", t.ID.String()),
+			logrus.WithField("updated-remote-peer-id", id.String()),
+			logrus.WithField("updated-remote-peer-urls", us),
 		)
 	}
 }

@@ -3,6 +3,7 @@ package leveldb
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -11,7 +12,8 @@ import (
 )
 
 type ldb struct {
-	db *leveldb.DB
+	db  *leveldb.DB
+	dir string
 }
 
 func (l *ldb) Set(ctx context.Context, key, val []byte) error {
@@ -57,17 +59,31 @@ func (m *ldb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
 	if err != nil {
 		return err
 	}
-	m.clearAndReopen(ctx)
+	if err := m.clearAndReopen(ctx); err != nil {
+		return err
+	}
 	for k, val := range datas {
 		m.Set(ctx, []byte(k), val)
 	}
 	return nil
 }
 
+func (m *ldb) clearAndReopen(ctx context.Context) error {
+	if err := m.db.Close(); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(m.dir); err != nil {
+		return err
+	}
+	var err error
+	m.db, err = leveldb.OpenFile(m.dir, nil)
+	return err
+}
+
 func NewStorage(path string) (kvstore.Kvstore, error) {
 	db, err := leveldb.OpenFile(path, nil)
-	return &ldb{db: db}, err
+	return &ldb{db: db, dir: path}, err
 }
-func (m *ldb) clearAndReopen(ctx context.Context) {
-
+func init() {
+	kvstore.NewLevelDB = NewStorage
 }

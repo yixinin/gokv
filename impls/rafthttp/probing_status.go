@@ -20,7 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/xiang90/probing"
-	"go.uber.org/zap"
 )
 
 const (
@@ -50,7 +49,7 @@ func addPeerToProber(lg *logrus.Logger, p probing.Prober, id string, us []string
 	s, err := p.Status(id)
 	if err != nil {
 		if lg != nil {
-			lg.Warn("failed to add peer into prober", zap.String("remote-peer-id", id), zap.Error(err))
+			lg.Warn("failed to add peer into prober", logrus.WithField("remote-peer-id", id), logrus.WithError(err))
 		}
 		return
 	}
@@ -68,10 +67,10 @@ func monitorProbingStatus(lg *logrus.Logger, s probing.Status, id string, roundT
 				if lg != nil {
 					lg.Warn(
 						"prober detected unhealthy status",
-						zap.String("round-tripper-name", roundTripperName),
-						zap.String("remote-peer-id", id),
-						zap.Duration("rtt", s.SRTT()),
-						zap.Error(s.Err()),
+						logrus.WithField("round-tripper-name", roundTripperName),
+						logrus.WithField("remote-peer-id", id),
+						logrus.WithField("rtt", s.SRTT()),
+						logrus.WithError(s.Err()),
 					)
 				}
 				interval = statusErrorInterval
@@ -82,11 +81,11 @@ func monitorProbingStatus(lg *logrus.Logger, s probing.Status, id string, roundT
 				if lg != nil {
 					lg.Warn(
 						"prober found high clock drift",
-						zap.String("round-tripper-name", roundTripperName),
-						zap.String("remote-peer-id", id),
-						zap.Duration("clock-drift", s.ClockDiff()),
-						zap.Duration("rtt", s.SRTT()),
-						zap.Error(s.Err()),
+						logrus.WithField("round-tripper-name", roundTripperName),
+						logrus.WithField("remote-peer-id", id),
+						logrus.WithField("clock-drift", s.ClockDiff()),
+						logrus.WithField("rtt", s.SRTT()),
+						logrus.WithError(s.Err()),
 					)
 				}
 			}

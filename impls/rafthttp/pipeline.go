@@ -23,13 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	stats "github.com/yixinin/gokv/impls/stats"
 	"github.com/yixinin/gokv/impls/types"
 	"go.etcd.io/etcd/pkg/v3/pbutil"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -71,8 +70,8 @@ func (p *pipeline) start() {
 	if p.tr != nil && p.tr.Logger != nil {
 		p.tr.Logger.Info(
 			"started HTTP pipelining with remote peer",
-			zap.String("local-member-id", p.tr.ID.String()),
-			zap.String("remote-peer-id", p.peerID.String()),
+			logrus.WithField("local-member-id", p.tr.ID.String()),
+			logrus.WithField("remote-peer-id", p.peerID.String()),
 		)
 	}
 }
@@ -84,8 +83,8 @@ func (p *pipeline) stop() {
 	if p.tr != nil && p.tr.Logger != nil {
 		p.tr.Logger.Info(
 			"stopped HTTP pipelining with remote peer",
-			zap.String("local-member-id", p.tr.ID.String()),
-			zap.String("remote-peer-id", p.peerID.String()),
+			logrus.WithField("local-member-id", p.tr.ID.String()),
+			logrus.WithField("remote-peer-id", p.peerID.String()),
 		)
 	}
 }
