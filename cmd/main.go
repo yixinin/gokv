@@ -62,6 +62,8 @@ func lis() {
 				fmt.Println(err)
 			default:
 				fmt.Println("unimpl cmd")
+				w.WriteError("unimpl cmd: " + cmd)
+				err = wb.Flush()
 				return
 			}
 		}

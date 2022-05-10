@@ -4,37 +4,39 @@ import (
 	"context"
 
 	"github.com/yixinin/gokv/impls/snap"
-	"github.com/yixinin/gokv/kvstore"
 )
 
 type Server struct {
-	*_hashImpl
-	*_setImpl
-	*_ttlImpl
-	*_numImpl
-
-	db kvstore.Kvstore
-
+	kv         KvEngine
 	snapShoter *snap.Snapshotter
 	proposeC   chan string
 	commitC    <-chan *commit
 	errorC     <-chan error
 }
 
-func NewServer(db kvstore.Kvstore) *Server {
+func NewServer(kv KvEngine) *Server {
 	return &Server{
-		_hashImpl: &_hashImpl{_db: db},
-		_setImpl:  &_setImpl{_db: db},
-		_ttlImpl:  &_ttlImpl{_db: db},
-		_numImpl:  &_numImpl{_db: db},
-		db:        db,
+		kv: kv,
 	}
 }
 
 func (s *Server) GetSnapshot(ctx context.Context) ([]byte, error) {
-	return s.db.GetSnapshot(ctx)
+	return s.kv.GetSnapshot(ctx)
 }
 
 func (s *Server) Run(ctx context.Context) {
 
+}
+
+func (s *Server) handleHash(args []string) {
+
+}
+
+func (s *Server) WithHash() *_hashImpl {
+	return &_hashImpl{
+		_db: &CmdContainer{
+			cmds: make(KvCmds, 0, 1),
+			db:   s.kv._kv,
+		},
+	}
 }

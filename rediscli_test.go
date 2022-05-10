@@ -16,6 +16,8 @@ func TestRedisCli(t *testing.T) {
 	t.Error(s, err)
 	s, err = c.Set(context.Background(), "k", "v", time.Second).Result()
 	t.Error(s, err)
+	i, err := c.HSet(context.Background(), "k", "f", "v").Result()
+	t.Error(i, err)
 	// x, err := c.Set(context.Background(), "k", "v", 1).Result()
 	// t.Log(x, err)
 

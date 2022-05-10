@@ -5,20 +5,22 @@ import (
 	"time"
 
 	"github.com/yixinin/gokv/codec"
-	"github.com/yixinin/gokv/kvstore"
 )
 
 type _setImpl struct {
-	_db kvstore.Kvstore
+	_kv KvEngine
 }
 
 func (s *_setImpl) Set(ctx context.Context, key string, val string, expireAt uint64) error {
-	err := s._db.Set(ctx, []byte(key), codec.Encode(val, expireAt).SavedData())
-	return err
+	s._kv.Propose(KvCmd{
+		Key: key,
+		Val: codec.Encode(val, expireAt).SavedData(),
+	})
+	return nil
 }
 
 func (s *_setImpl) Get(ctx context.Context, key string) (string, error) {
-	data, err := s._db.Get(ctx, []byte(key))
+	data, err := s._kv.Get(ctx, []byte(key))
 	if err != nil {
 		return "", err
 	}
@@ -31,13 +33,17 @@ func (s *_setImpl) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (s *_setImpl) Delete(ctx context.Context, key string) error {
-	return s._db.Delete(ctx, []byte(key))
+	s._kv.Propose(KvCmd{
+		Key: key,
+		Del: true,
+	})
+	return nil
 }
 
 func (s *_setImpl) checkExpire(ctx context.Context, key string, expireAt uint64) error {
 	var unixNow = uint64(time.Now().Unix())
 	if expireAt != 0 && expireAt <= unixNow {
-		go s._db.Delete(context.Background(), []byte(key))
+		go s.Delete(context.Background(), key)
 		return ErrNotfound
 	}
 	return nil

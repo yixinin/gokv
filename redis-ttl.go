@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/yixinin/gokv/codec"
-	"github.com/yixinin/gokv/kvstore"
 )
 
 type _ttlImpl struct {
-	_db kvstore.Kvstore
+	_db KvEngine
 }
 
 func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) error {

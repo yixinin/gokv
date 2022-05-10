@@ -123,6 +123,16 @@ func (w *Writer) WriteStatus(s string) error {
 	return w.crlf()
 }
 
+func (w *Writer) WriteError(s string) error {
+	if err := w.WriteByte(ErrorReply); err != nil {
+		return err
+	}
+	if _, err := w.Write(codec.StringToBytes(s)); err != nil {
+		return err
+	}
+	return w.crlf()
+}
+
 func (w *Writer) bytes(b []byte) error {
 	if err := w.WriteByte(StringReply); err != nil {
 		return err

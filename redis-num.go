@@ -5,11 +5,10 @@ import (
 	"strconv"
 
 	"github.com/yixinin/gokv/codec"
-	"github.com/yixinin/gokv/kvstore"
 )
 
 type _numImpl struct {
-	_db kvstore.Kvstore
+	_db KvEngine
 }
 
 func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, error) {

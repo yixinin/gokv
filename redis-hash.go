@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/yixinin/gokv/codec"
-	"github.com/yixinin/gokv/kvstore"
 )
 
 type HashIface interface {
@@ -63,7 +62,7 @@ func genFields(key string, fields []string) []byte {
 }
 
 type _hashImpl struct {
-	_db kvstore.Kvstore
+	_db *CmdContainer
 }
 
 func (h *_hashImpl) hCheckKey(ctx context.Context, key []byte) error {
