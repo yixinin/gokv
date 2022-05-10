@@ -479,7 +479,7 @@ func (rc *raftNode) serveRaft() {
 		log.Fatalf("raftexample: Failed parsing URL (%v)", err)
 	}
 
-	ln, err := newStoppableListener(url.Host, rc.httpstopc)
+	ln, err := NewStoppableListener(url.Host, rc.httpstopc)
 	if err != nil {
 		log.Fatalf("raftexample: Failed to listen rafthttp (%v)", err)
 	}
