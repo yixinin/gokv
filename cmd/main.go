@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/yixinin/gokv"
+	"github.com/yixinin/gokv/kvstore/memdb"
+	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -72,27 +74,7 @@ func lis() {
 }
 
 func main() {
-	lis()
-	// flags()
-
-	// var storage kvstore.Kvstore
-	// switch strings.ToLower(db) {
-	// case LEVELDB:
-	// 	var err error
-	// 	storage, err = leveldb.NewStorage(path.Join(dataPath, "leveldb"))
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// case MEMDB:
-	// 	storage = memdb.NewStorage()
-	// }
-
-	// var ctx, cancel = context.WithCancel(context.Background())
-	// defer cancel()
-
-	// var s = gokv.NewServer(storage)
-	// go s.GC(ctx)
-
+	newRaft()
 }
 
 func newRaft() {
@@ -111,8 +93,13 @@ func newRaft() {
 	var kvs *gokv.KvEngine
 	getSnapshot := func(ctx context.Context) ([]byte, error) { return kvs.GetSnapshot(ctx) }
 	commitC, errorC, snapshotterReady := gokv.NewRaftNode(*id, strings.Split(*cluster, ","), *join, getSnapshot, proposeC, confChangeC)
-	var dataPath = "memdb"
-	kvs = gokv.NewKvEngine(dataPath, <-snapshotterReady, proposeC, commitC, errorC)
 
-	// kvs.Run(context.Background())
+	kvs = gokv.NewKvEngine(memdb.NewStorage(), <-snapshotterReady, proposeC, commitC, errorC)
+	server := gokv.NewServer(kvs)
+	var ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	err := server.Run(ctx)
+	if err != nil {
+		logger.Error(ctx, err)
+	}
 }

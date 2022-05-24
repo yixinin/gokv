@@ -84,6 +84,3 @@ func NewStorage(path string) (kvstore.Kvstore, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	return &ldb{db: db, dir: path}, err
 }
-func init() {
-	kvstore.NewLevelDB = NewStorage
-}

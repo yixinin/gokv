@@ -2,3 +2,6 @@
 tmp/*
 *.log
 cmd/cmd
+.vscode/*
+cmd/raftexample*
+*.txt

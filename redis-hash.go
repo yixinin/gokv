@@ -55,18 +55,17 @@ func readFields(hkval []byte) []string {
 	}
 	return fields
 }
-func genFields(key string, fields []string) []byte {
-	s := []byte(strings.Join(fields, ","))
-	val := fmt.Sprintf("h:%s:%s", key, s)
-	return []byte(val)
+func genFields(key string, fields []string) string {
+	s := strings.Join(fields, ",")
+	return fmt.Sprintf("h:%s:%s", key, s)
 }
 
 type _hashImpl struct {
-	_db *CmdContainer
+	cmd *CmdContainer
 }
 
-func (h *_hashImpl) hCheckKey(ctx context.Context, key []byte) error {
-	hkval, err := h._db.Get(ctx, key)
+func (h *_hashImpl) hCheckKey(ctx context.Context, key string) error {
+	hkval, err := h.cmd.Get(ctx, key)
 	switch err {
 	case nil:
 		if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
@@ -75,7 +74,7 @@ func (h *_hashImpl) hCheckKey(ctx context.Context, key []byte) error {
 		if hkval[0] != 'h' || hkval[1] != ':' {
 			return ErrKeyOPType
 		}
-		if !sliceEq(hkval[2:2+len(key)], key) {
+		if !sliceEq(hkval[2:2+len(key)], codec.StringToBytes(key)) {
 			return ErrKeyOPType
 		}
 		return nil
@@ -87,8 +86,8 @@ func (h *_hashImpl) hCheckKey(ctx context.Context, key []byte) error {
 }
 
 func (h *_hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) error {
-	var bKey = []byte(key)
-	hkval, err := h._db.Get(ctx, bKey)
+	var bKey = codec.StringToBytes(key)
+	hkval, err := h.cmd.Get(ctx, key)
 	switch err {
 	case nil:
 		if len(hkval) <= len(key)+2 || hkval[len(key)+2] != SplitC {
@@ -107,18 +106,18 @@ func (h *_hashImpl) hCheckKeyForUpdate(ctx context.Context, key, field string) e
 			}
 		}
 		fields = append(fields, field)
-		return h._db.Set(ctx, bKey, genFields(key, fields))
+		return h.cmd.Set(ctx, key, genFields(key, fields))
 	case ErrNotfound:
 		val := genFields(key, []string{field})
-		return h._db.Set(ctx, bKey, val)
+		return h.cmd.Set(ctx, key, val)
 	default:
 		return err
 	}
 }
 
-func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([][]byte, []string, error) {
+func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([]string, []string, error) {
 	var bKey = []byte(key)
-	hkval, err := h._db.Get(ctx, bKey)
+	hkval, err := h.cmd.Get(ctx, key)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -133,32 +132,30 @@ func (h *_hashImpl) hGetAllKeys(ctx context.Context, key string) ([][]byte, []st
 		return nil, nil, ErrKeyOPType
 	}
 	fields := readFields(hkval[2+len(key)+1:])
-	var keys = make([][]byte, 0, len(fields))
+	var keys = make([]string, 0, len(fields))
 	for _, f := range fields {
 		keys = append(keys, genHashFieldKey(key, f))
 	}
 	return keys, fields, nil
 }
 
-func genHashFieldKey(key, field string) []byte {
-	fkey := fmt.Sprintf("h:%s:%s", key, field)
-	return []byte(fkey)
+func genHashFieldKey(key, field string) string {
+	return fmt.Sprintf("h:%s:%s", key, field)
 }
 func (h *_hashImpl) HSet(ctx context.Context, key, field, val string) error {
 	if err := h.hCheckKeyForUpdate(ctx, key, field); err != nil {
 		return err
 	}
 	fkey := genHashFieldKey(key, field)
-	return h._db.Set(ctx, fkey, codec.Encode(val).SavedData())
+	return h.cmd.Set(ctx, fkey, val)
 }
 
 func (h *_hashImpl) HGet(ctx context.Context, key, field string) (string, error) {
-
-	if err := h.hCheckKey(ctx, []byte(key)); err != nil {
+	if err := h.hCheckKey(ctx, key); err != nil {
 		return "", err
 	}
 	fkey := genHashFieldKey(key, field)
-	data, err := h._db.Get(ctx, fkey)
+	data, err := h.cmd.Get(ctx, fkey)
 	if err != nil {
 		return "", err
 	}
@@ -175,9 +172,9 @@ func (h *_hashImpl) checkExpire(ctx context.Context, key string, expireAt uint64
 			defer recover()
 			keys, _, _ := h.hGetAllKeys(ctx, key)
 			for _, k := range keys {
-				_ = h._db.Delete(ctx, k)
+				_ = h.cmd.Delete(ctx, k)
 			}
-			_ = h._db.Delete(ctx, []byte(key))
+			_ = h.cmd.Delete(ctx, key)
 		}(context.Background())
 		return ErrNotfound
 	}
@@ -192,7 +189,7 @@ func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string,
 	var m = make(map[string]string, len(key))
 	var newKeys = make([]string, 0, len(keys))
 	for i, key := range keys {
-		data, err := h._db.Get(ctx, key)
+		data, err := h.cmd.Get(ctx, key)
 		if err == ErrNotfound {
 			continue
 		}
@@ -203,7 +200,7 @@ func (h *_hashImpl) HGetAll(ctx context.Context, key string) (map[string]string,
 		newKeys = append(newKeys, string(key))
 	}
 	if len(newKeys) < len(keys) {
-		_ = h._db.Set(ctx, []byte(key), genFields(key, newKeys))
+		_ = h.cmd.Set(ctx, key, genFields(key, newKeys))
 	}
 	return m, nil
 }
@@ -220,13 +217,13 @@ func (h *_hashImpl) HDel(ctx context.Context, key string, field ...string) error
 	var newKeys = make([]string, 0, len(keys))
 	for _, key := range keys {
 		if _, ok := waitDeletes[string(key)]; ok {
-			_ = h._db.Delete(ctx, key)
+			_ = h.cmd.Delete(ctx, key)
 			continue
 		}
 		newKeys = append(newKeys, string(key))
 	}
 	if len(newKeys) < len(keys) {
-		_ = h._db.Set(ctx, []byte(key), genFields(key, newKeys))
+		_ = h.cmd.Set(ctx, key, genFields(key, newKeys))
 	}
 	return nil
 }

@@ -145,6 +145,9 @@ func (v Value) Bytes() []byte {
 func (v Value) SavedData() []byte {
 	return v.data
 }
+func (v Value) Raw() []byte {
+	return v.data
+}
 
 const (
 	NIL       uint8 = 0

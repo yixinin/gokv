@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/impls/snap"
 	"github.com/yixinin/gokv/kvstore"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -20,31 +21,20 @@ const (
 	MEMDB = "memdb"
 )
 
-func NewKvEngine(kvpath string, snapshotter *snap.Snapshotter, proposeC chan<- string, commitC <-chan *commit, errorC <-chan error) *KvEngine {
-	var db kvstore.Kvstore
-	switch kvpath {
-	case MEMDB:
-		db = kvstore.NewMemDB()
-	default:
-		var err error
-		db, err = kvstore.NewLevelDB(kvpath)
-		if err != nil {
-			panic(err)
-		}
-	}
+func NewKvEngine(db kvstore.Kvstore, snapshotter *snap.Snapshotter, proposeC chan<- string, commitC <-chan *commit, errorC <-chan error) *KvEngine {
 	engine := &KvEngine{
 		_kv:         db,
 		snapshotter: snapshotter,
 		proposeC:    proposeC,
 	}
 
-	snapshot, err := engine.loadSnapshot()
+	snapshot, err := engine.LoadSnapshot()
 	if err != nil {
 		log.Panic(err)
 	}
 	if snapshot != nil {
 		log.Printf("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
-		if err := engine.recoverFromSnapshot(snapshot.Data); err != nil {
+		if err := engine.RecoverFromSnapshot(snapshot.Data); err != nil {
 			log.Panic(err)
 		}
 	}
@@ -70,13 +60,13 @@ func (s *KvEngine) readCommits(commitC <-chan *commit, errorC <-chan error) {
 	for commit := range commitC {
 		if commit == nil {
 			// signaled to load snapshot
-			snapshot, err := s.loadSnapshot()
+			snapshot, err := s.LoadSnapshot()
 			if err != nil {
 				log.Panic(err)
 			}
 			if snapshot != nil {
 				log.Printf("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
-				if err := s.recoverFromSnapshot(snapshot.Data); err != nil {
+				if err := s.RecoverFromSnapshot(snapshot.Data); err != nil {
 					log.Panic(err)
 				}
 			}
@@ -105,14 +95,13 @@ func (s *KvEngine) readCommits(commitC <-chan *commit, errorC <-chan error) {
 }
 
 func (s *KvEngine) Propose(cmd ...KvCmd) {
+	if len(cmd) == 0 {
+		return
+	}
 	s.proposeC <- KvCmds(cmd).Marshal()
 }
 
-func (s *KvEngine) getSnapshot() ([]byte, error) {
-	return s.getSnapshot()
-}
-
-func (s *KvEngine) loadSnapshot() (*raftpb.Snapshot, error) {
+func (s *KvEngine) LoadSnapshot() (*raftpb.Snapshot, error) {
 	snapshot, err := s.snapshotter.Load()
 	if err == snap.ErrNoSnapshot {
 		return nil, nil
@@ -123,7 +112,7 @@ func (s *KvEngine) loadSnapshot() (*raftpb.Snapshot, error) {
 	return snapshot, nil
 }
 
-func (s *KvEngine) recoverFromSnapshot(snapshot []byte) error {
+func (s *KvEngine) RecoverFromSnapshot(snapshot []byte) error {
 	return s._kv.RecoverFromSnapshot(context.Background(), snapshot)
 }
 
@@ -131,21 +120,11 @@ func (s *KvEngine) Get(ctx context.Context, key []byte) ([]byte, error) {
 	return s._kv.Get(ctx, key)
 }
 
-func (s *KvEngine) WithHash() *_hashImpl {
-	return &_hashImpl{
-		_db: &CmdContainer{
-			cmds: make(KvCmds, 0, 1),
-			db:   s._kv,
-		},
-	}
+func (e *KvEngine) GetSnapshot(ctx context.Context) ([]byte, error) {
+	return e._kv.GetSnapshot(ctx)
 }
-func (s *KvEngine) handleHash(ctx context.Context, key, field string, val string) error {
-	c := s.WithHash()
-	err := c.HSet(ctx, key, field, val)
-	if err != nil {
-		return err
-	}
-	s.Propose(c._db.cmds...)
+func (s *KvEngine) commit(c *CmdContainer) error {
+	s.Propose(c.cmds...)
 	return nil
 }
 
@@ -154,24 +133,68 @@ type CmdContainer struct {
 	db   kvstore.Kvstore
 }
 
-func (s *KvEngine) WithKvCmds(ctx context.Context) CmdContainer {
-	return CmdContainer{}
+func (s *KvEngine) BaseCmd() (*_baseImpl, func()) {
+	var cmd = &CmdContainer{
+		db:   s._kv,
+		cmds: make(KvCmds, 0, 1),
+	}
+	var commit = func() {
+		s.commit(cmd)
+	}
+	return &_baseImpl{
+		cmd: cmd,
+	}, commit
 }
-func (c *CmdContainer) Set(ctx context.Context, key []byte, val []byte) error {
+
+func (s *KvEngine) TTLCmd() (*_ttlImpl, func()) {
+	var cmd = &CmdContainer{
+		cmds: make(KvCmds, 0, 1),
+		db:   s._kv,
+	}
+	var commit = func() {
+		s.commit(cmd)
+	}
+	return &_ttlImpl{
+		cmd: cmd,
+	}, commit
+}
+
+func (s *KvEngine) HashCmd() (*_hashImpl, func()) {
+	var cmd = &CmdContainer{
+		cmds: make(KvCmds, 0, 1),
+		db:   s._kv,
+	}
+	var commit = func() {
+		s.commit(cmd)
+	}
+	return &_hashImpl{
+		cmd: cmd,
+	}, commit
+}
+
+func (c *CmdContainer) Set(ctx context.Context, key, val string, expireAt ...uint64) error {
 	c.cmds = append(c.cmds, KvCmd{
-		Key: string(key),
-		Val: val,
+		Key: key,
+		Val: codec.Encode(val, expireAt...).Raw(),
 	})
+
 	return nil
 }
 
-func (c *CmdContainer) Delete(ctx context.Context, key []byte) error {
+func (c *CmdContainer) SetRaw(ctx context.Context, key string, data []byte) error {
 	c.cmds = append(c.cmds, KvCmd{
-		Key: string(key),
+		Key: key,
+		Val: data,
+	})
+	return nil
+}
+func (c *CmdContainer) Delete(ctx context.Context, key string) error {
+	c.cmds = append(c.cmds, KvCmd{
+		Key: key,
 		Del: true,
 	})
 	return nil
 }
-func (c *CmdContainer) Get(ctx context.Context, key []byte) ([]byte, error) {
-	return c.db.Get(ctx, key)
+func (c *CmdContainer) Get(ctx context.Context, key string) ([]byte, error) {
+	return c.db.Get(ctx, codec.StringToBytes(key))
 }

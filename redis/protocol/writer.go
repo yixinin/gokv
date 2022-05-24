@@ -12,10 +12,9 @@ import (
 
 type writer interface {
 	io.Writer
-	io.ByteWriter
+	// io.ByteWriter
 	// io.StringWriter
-	WriteString(s string) (n int, err error)
-	Flush() error
+	// WriteString(s string) (n int, err error)
 }
 
 type Writer struct {
@@ -35,7 +34,7 @@ func NewWriter(wr writer) *Writer {
 }
 
 func (w *Writer) WriteArgs(args []interface{}) error {
-	if err := w.WriteByte(ArrayReply); err != nil {
+	if _, err := w.Write([]byte{ArrayReply}); err != nil {
 		return err
 	}
 
@@ -113,8 +112,12 @@ func (w *Writer) WriteArg(v interface{}) error {
 	}
 }
 
+func (w *Writer) WriteString(s string) error {
+	return w.string(s)
+}
+
 func (w *Writer) WriteStatus(s string) error {
-	if err := w.WriteByte(StatusReply); err != nil {
+	if _, err := w.Write([]byte{StatusReply}); err != nil {
 		return err
 	}
 	if _, err := w.Write(codec.StringToBytes(s)); err != nil {
@@ -124,7 +127,7 @@ func (w *Writer) WriteStatus(s string) error {
 }
 
 func (w *Writer) WriteError(s string) error {
-	if err := w.WriteByte(ErrorReply); err != nil {
+	if _, err := w.Write([]byte{ErrorReply}); err != nil {
 		return err
 	}
 	if _, err := w.Write(codec.StringToBytes(s)); err != nil {
@@ -134,7 +137,7 @@ func (w *Writer) WriteError(s string) error {
 }
 
 func (w *Writer) bytes(b []byte) error {
-	if err := w.WriteByte(StringReply); err != nil {
+	if _, err := w.Write([]byte{StringReply}); err != nil {
 		return err
 	}
 
@@ -169,8 +172,9 @@ func (w *Writer) float(f float64) error {
 }
 
 func (w *Writer) crlf() error {
-	if err := w.WriteByte('\r'); err != nil {
+	if _, err := w.Write([]byte{'\r'}); err != nil {
 		return err
 	}
-	return w.WriteByte('\n')
+	_, err := w.Write([]byte{'\n'})
+	return err
 }

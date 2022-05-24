@@ -8,24 +8,18 @@ import (
 )
 
 type _numImpl struct {
-	_db KvEngine
+	cmd *CmdContainer
 }
 
 func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, error) {
-	data, err := n._db.Get(ctx, []byte(key))
+	data, err := n.cmd.Get(ctx, key)
 	if err != nil && err != ErrNotfound {
-
 		return "", err
 	}
 	oldV := codec.Decode(data)
-
 	// set new
 	if oldV.Expired() || err == ErrNotfound {
-		v := codec.Encode(val)
-		if v.Type() != codec.IntType {
-			return "", ErrValOpType
-		}
-		err := n._db.Set(ctx, []byte(key), v.SavedData())
+		err := n.cmd.Set(ctx, key, val)
 		return val, err
 	}
 
@@ -35,7 +29,7 @@ func (n *_numImpl) Incr(ctx context.Context, key string, val string) (string, er
 		return "", ErrValOpType
 	}
 	sumB := bytesAdd(data[9:], codec.Int642Bytes(i))
-	err = n._db.Set(ctx, []byte(key), data)
+	err = n.cmd.SetRaw(ctx, key, data)
 	if err != nil {
 		return "", err
 	}

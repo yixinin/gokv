@@ -2,23 +2,19 @@ package gokv
 
 import (
 	"context"
+	"fmt"
 	"testing"
-	"time"
 
 	"github.com/go-redis/redis/v8"
 )
 
 func TestRedisCli(t *testing.T) {
 	c := redis.NewClient(&redis.Options{
-		Addr: "localhost:6378",
+		Addr: "localhost:6379",
 	})
-	s, err := c.Ping(context.Background()).Result()
-	t.Error(s, err)
-	s, err = c.Set(context.Background(), "k", "v", time.Second).Result()
-	t.Error(s, err)
-	i, err := c.HSet(context.Background(), "k", "f", "v").Result()
-	t.Error(i, err)
-	// x, err := c.Set(context.Background(), "k", "v", 1).Result()
-	// t.Log(x, err)
+	x, err := c.Command(context.Background()).Result()
+
+	// buf, _ := json.Marshal(res)
+	fmt.Println(x, err)
 
 }

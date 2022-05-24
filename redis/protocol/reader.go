@@ -99,7 +99,7 @@ func (r *Reader) ReadRequest(m MultiBulkParse) (interface{}, error) {
 	case ErrorReply:
 		return nil, ParseErrorReply(line)
 	case StatusReply:
-		return string(line[1:]), nil
+		return codec.BytesToString(line[1:]), nil
 	case IntReply:
 		return codec.ParseInt(line[1:], 10, 64)
 	case StringReply:

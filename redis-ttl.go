@@ -10,12 +10,12 @@ import (
 )
 
 type _ttlImpl struct {
-	_db KvEngine
+	cmd *CmdContainer
 }
 
 func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) error {
 	var nowUnix = uint64(time.Now().Unix())
-	data, err := t._db.Get(ctx, []byte(key))
+	data, err := t.cmd.Get(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -23,16 +23,16 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) er
 	oldExpireAt := v.ExpireAt()
 	if (oldExpireAt != 0 && oldExpireAt <= nowUnix) ||
 		(expireAt != 0 && expireAt <= nowUnix) {
-		_ = t._db.Delete(ctx, []byte(key))
+		_ = t.cmd.Delete(ctx, key)
 		return ErrNotfound
 	}
 	v.SetExpireAt(expireAt)
-	return t._db.Set(ctx, []byte(key), v.SavedData())
+	return t.cmd.SetRaw(ctx, key, v.Raw())
 }
 
 func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
 	var nowUnix = uint64(time.Now().Unix())
-	data, err := t._db.Get(ctx, []byte(key))
+	data, err := t.cmd.Get(ctx, key)
 	if err != nil {
 		return -2
 	}
@@ -42,13 +42,13 @@ func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
 		return -1
 	}
 	if expireAt != 0 && expireAt <= nowUnix {
-		_ = t._db.Delete(ctx, []byte(key))
+		_ = t.cmd.Delete(ctx, key)
 		return -2
 	}
 	return int64(expireAt - nowUnix)
 }
 
-func (t *_ttlImpl) GC(ctx context.Context) {
+func (t *KvEngine) GC(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println(r, string(debug.Stack()))
@@ -65,14 +65,15 @@ func (t *_ttlImpl) GC(ctx context.Context) {
 		case <-ticker.C:
 			func() {
 				defer recover()
-
+				cmd, commit := t.BaseCmd()
+				defer commit()
 				var nowUnix = uint64(time.Now().Unix())
 				var i int
 
-				t._db.Scan(ctx, func(key, data []byte) {
+				t._kv.Scan(ctx, func(key, data []byte) {
 					expireAt := codec.Decode(data).ExpireAt()
 					if expireAt != 0 && expireAt <= nowUnix {
-						_ = t._db.Delete(ctx, key)
+						_ = cmd.Delete(ctx, codec.BytesToString(key))
 					}
 					prevKey = key
 					i++
