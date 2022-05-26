@@ -7,8 +7,8 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"github.com/yixinin/gokv"
-	"github.com/yixinin/gokv/kvstore"
+	"github.com/tiglabs/raft/logger"
+	"github.com/yixinin/gokv/kverror"
 )
 
 type ldb struct {
@@ -17,13 +17,15 @@ type ldb struct {
 }
 
 func (l *ldb) Set(ctx context.Context, key, val []byte) error {
+	logger.Debug("%vset %s: %s", l, key, val)
 	return l.db.Put(key, val, nil)
 }
 
 func (l *ldb) Get(ctx context.Context, key []byte) ([]byte, error) {
+	logger.Debug("%vget %s:", l, key)
 	data, err := l.db.Get(key, nil)
 	if err == leveldb.ErrNotFound {
-		return nil, gokv.ErrNotfound
+		return nil, kverror.ErrNotFound
 	}
 	return data, err
 }
@@ -80,7 +82,14 @@ func (m *ldb) clearAndReopen(ctx context.Context) error {
 	return err
 }
 
-func NewStorage(path string) (kvstore.Kvstore, error) {
+func (m *ldb) Close(ctx context.Context) error {
+	if m != nil && m.db != nil {
+		return m.db.Close()
+	}
+	return nil
+}
+
+func NewStorage(path string) (*ldb, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	return &ldb{db: db, dir: path}, err
 }

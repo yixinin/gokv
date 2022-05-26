@@ -1,5 +1,13 @@
 package protocol
 
+import (
+	"strconv"
+	"time"
+)
+
+type Command interface {
+}
+
 type SetCmd struct {
 	Key    string
 	Val    string
@@ -13,10 +21,18 @@ func NewSetCmd(args []interface{}) (SetCmd, bool) {
 	}
 	cmd.Key, _ = args[1].(string)
 	cmd.Val, _ = args[2].(string)
-	if len(args) >= 4 {
-		ex, ok := args[3].(int64)
-		if ok {
-			cmd.Expire = uint64(ex)
+	for i := 3; i < len(args); i++ {
+		if a, ok := args[i].(string); ok {
+			switch a {
+			case "ex":
+				if len(args) >= i+2 {
+					ex, _ := strconv.ParseInt(args[i+1].(string), 10, 64)
+					if ex > 0 {
+						cmd.Expire = uint64(time.Now().Unix() + ex)
+					}
+					i++
+				}
+			}
 		}
 	}
 	return cmd, true

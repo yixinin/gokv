@@ -3,69 +3,78 @@ package memdb
 import (
 	"context"
 	"encoding/json"
-	"sync"
 
-	"github.com/yixinin/gokv"
-	"github.com/yixinin/gokv/kvstore"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/comparer"
+	"github.com/syndtr/goleveldb/leveldb/memdb"
+	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/yixinin/gokv/kverror"
 )
 
-type memdb struct {
-	m sync.Map
+type mdb struct {
+	db *memdb.DB
 }
 
-func (m *memdb) Set(ctx context.Context, key, val []byte) error {
-	return m.set(ctx, string(key), val)
+func (m mdb) Set(ctx context.Context, key, val []byte) error {
+	return m.db.Put(key, val)
 }
 
-func (m *memdb) set(ctx context.Context, key string, val []byte) error {
-	m.m.Store(string(key), val)
-	return nil
-}
-
-func (m *memdb) Get(ctx context.Context, key []byte) ([]byte, error) {
-	val, ok := m.m.Load(string(key))
-	if !ok {
-		return nil, gokv.ErrNotfound
+func (m mdb) Get(ctx context.Context, key []byte) ([]byte, error) {
+	data, err := m.db.Get(key)
+	if err == leveldb.ErrNotFound {
+		return nil, kverror.ErrNotFound
 	}
-	return val.([]byte), nil
+	return data, err
+}
+func (m mdb) Delete(ctx context.Context, key []byte) error {
+	return m.db.Delete(key)
+}
+func (m mdb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
+	slice := util.BytesPrefix(prefix)
+	iter := m.db.NewIterator(slice)
+	defer iter.Release()
+	for i := 0; iter.Next() && i < limit; i++ {
+		f(iter.Key(), iter.Value())
+	}
 }
 
-func (m *memdb) Delete(ctx context.Context, key []byte) error {
-	m.m.Delete(string(key))
-	return nil
+func (db mdb) GetSnapshot(ctx context.Context) ([]byte, error) {
+	var m = make(map[string][]byte, 16)
+	iter := db.db.NewIterator(nil)
+	for iter.Next() {
+		m[string(iter.Key())] = iter.Value()
+	}
+	return json.Marshal(m)
 }
 
-func (m *memdb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
-	var i int
-	m.m.Range(func(key, value any) bool {
-		f([]byte(key.(string)), value.([]byte))
-		i++
-		return i < limit
-	})
-}
-
-func (m *memdb) GetSnapshot(ctx context.Context) ([]byte, error) {
-	var datas = make(map[string][]byte, 16)
-	m.m.Range(func(key, value any) bool {
-		datas[key.(string)] = value.([]byte)
-		return false
-	})
-	return json.Marshal(datas)
-}
-
-func (m *memdb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
+func (m mdb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
 	var datas = make(map[string][]byte)
 	err := json.Unmarshal(data, &datas)
 	if err != nil {
 		return err
 	}
-	m.m = sync.Map{}
+	if err := m.clearAndReopen(ctx); err != nil {
+		return err
+	}
 	for k, val := range datas {
-		m.set(ctx, k, val)
+		m.Set(ctx, []byte(k), val)
 	}
 	return nil
 }
 
-func NewStorage() kvstore.Kvstore {
-	return &memdb{}
+func (m mdb) clearAndReopen(ctx context.Context) error {
+
+	m.db = memdb.New(comparer.DefaultComparer, 1024)
+	return nil
+}
+
+func (m mdb) Close(ctx context.Context) error {
+
+	return nil
+}
+
+func NewStorage() *mdb {
+	m := &mdb{}
+	m.db = memdb.New(comparer.DefaultComparer, 1024)
+	return m
 }

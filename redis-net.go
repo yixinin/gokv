@@ -3,11 +3,11 @@ package gokv
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
 
+	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
 	raft "go.etcd.io/etcd/raft/v3"
@@ -23,15 +23,14 @@ type _netImpl struct {
 	lis       net.Listener
 	clients   map[string]net.Conn
 	clientCmd chan Cmd
-
-	engine *KvEngine
+	s         *Server
 }
 
-func NewNetImpl(engine *KvEngine) *_netImpl {
+func NewNetImpl(s *Server) *_netImpl {
 	return &_netImpl{
 		clients:   make(map[string]net.Conn),
 		clientCmd: make(chan Cmd),
-		engine:    engine,
+		s:         s,
 	}
 }
 
@@ -116,6 +115,7 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 		logger.Info(ctx, "empty cmd")
 		return
 	}
+	log.Debug("cmd args %v", args)
 	cmd, ok := args[0].(string)
 	if !ok {
 		logger.Info(ctx, "wrong cmd", args)
@@ -129,73 +129,53 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 	w := protocol.NewWriter(client)
 	switch cmd {
 	case "set":
-		base, commit := n.engine.BaseCmd()
-		defer commit()
+		commit, resp := n.s.StartCommit(ctx)
+		if resp != nil {
+			w.WriteString(resp.String())
+			return
+		}
 		setCmd, ok := protocol.NewSetCmd(args)
 		if !ok {
 			logger.Info(ctx, "wrong cmd", args)
 			return
 		}
-		err := base.Set(ctx, setCmd.Key, setCmd.Val, setCmd.Expire)
-		if err != nil {
-			logger.Error(ctx, err)
-		}
+		cmd := n.s.Set(ctx, setCmd.Key, setCmd.Val, setCmd.Expire)
+		resp = commit(cmd)
+		fmt.Println(resp)
+		w.WriteString(resp.String())
 	case "get":
-		base, commit := n.engine.BaseCmd()
-		defer commit()
+		commit, clusterResp := n.s.StartCommit(ctx)
 		keyCmd, ok := protocol.NewKeyCmd(args)
 		if !ok {
 			logger.Info(ctx, "wrong cmd", args)
 			return
 		}
-		val, err := base.Get(ctx, keyCmd.Key)
-		if err != nil {
-			logger.Error(ctx, err)
+		cmd, resp := n.s.Get(ctx, keyCmd.Key)
+		if resp != nil {
+			w.WriteString(resp.String())
 			return
 		}
-
-		err = w.WriteString(val)
-		if err != nil {
-			logger.Error(ctx, err)
+		if clusterResp == nil {
+			// is leader, delete expired key
+			resp = commit(cmd)
+			w.WriteString(resp.String())
 		}
 	case "del":
-		base, commit := n.engine.BaseCmd()
-		defer commit()
+		commit, resp := n.s.StartCommit(ctx)
+		if resp != nil {
+			w.WriteString(resp.String())
+			return
+		}
 		keyCmd, ok := protocol.NewKeyCmd(args)
 		if !ok {
 			logger.Info(ctx, "wrong cmd", args)
 			return
 		}
-		err := base.Delete(ctx, keyCmd.Key)
-		if err != nil {
-			logger.Error(ctx, err)
-		}
+		cmd := n.s.Delete(ctx, keyCmd.Key)
+		resp = commit(cmd)
+		w.WriteString(resp.String())
 	case "ttl":
-		base, commit := n.engine.TTLCmd()
-		defer commit()
-		ttlCmd, ok := protocol.NewKeyCmd(args)
-		if !ok {
-			logger.Info(ctx, "wrong cmd", args)
-			return
-		}
-		ttl := base.TTL(ctx, ttlCmd.Key)
-		err := w.WriteArg(ttl)
-		if err != nil {
-			logger.Error(ctx, err)
-		}
 	case "expire":
-		base, commit := n.engine.TTLCmd()
-		defer commit()
-		expCmd, ok := protocol.NewExpirecmd(args)
-		if !ok {
-			log.Println("wrong cmd", args)
-			return
-		}
-		ttl := base.TTL(ctx, expCmd.Key)
-		err := w.WriteArg(ttl)
-		if err != nil {
-			logger.Error(ctx, err)
-		}
 	case "hset":
 	case "hget":
 	case "hgetall":

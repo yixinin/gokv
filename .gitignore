@@ -5,3 +5,12 @@ cmd/cmd
 .vscode/*
 cmd/raftexample*
 *.txt
+cmd/Data
+cmd/Logs
+cmd/node1/Data/*
+cmd/node2/Data/*
+cmd/node3/Data/*
+cmd/node1/cmd
+cmd/node2/cmd
+cmd/node3/cmd
+
