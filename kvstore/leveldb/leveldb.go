@@ -7,7 +7,7 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/kverror"
 )
 
@@ -17,12 +17,12 @@ type ldb struct {
 }
 
 func (l *ldb) Set(ctx context.Context, key, val []byte) error {
-	logger.Debug("%vset %s: %s", l, key, val)
+	log.Debug("%vset %s: %s", l, key, val)
 	return l.db.Put(key, val, nil)
 }
 
 func (l *ldb) Get(ctx context.Context, key []byte) ([]byte, error) {
-	logger.Debug("%vget %s:", l, key)
+	log.Debug("%vget %s:", l, key)
 	data, err := l.db.Get(key, nil)
 	if err == leveldb.ErrNotFound {
 		return nil, kverror.ErrNotFound

@@ -65,7 +65,7 @@ func (n *_netImpl) listen(ctx context.Context, port uint16) error {
 }
 
 func (n *_netImpl) addClient(ctx context.Context, conn net.Conn) {
-	err := conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	err := conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 	if err != nil {
 		logger.Error(ctx, err)
 		return
@@ -145,21 +145,21 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 		w.WriteString(resp.String())
 	case "get":
 		commit, clusterResp := n.s.StartCommit(ctx)
+		log.Debug("start get commit")
 		keyCmd, ok := protocol.NewKeyCmd(args)
 		if !ok {
 			logger.Info(ctx, "wrong cmd", args)
 			return
 		}
+		log.Debug("new key cmd")
 		cmd, resp := n.s.Get(ctx, keyCmd.Key)
-		if resp != nil {
-			w.WriteString(resp.String())
-			return
+		log.Debug("kv get")
+		if cmd != nil && clusterResp == nil {
+			go commit(cmd)
 		}
-		if clusterResp == nil {
-			// is leader, delete expired key
-			resp = commit(cmd)
-			w.WriteString(resp.String())
-		}
+		log.Debug("response")
+		w.WriteString(resp.String())
+		return
 	case "del":
 		commit, resp := n.s.StartCommit(ctx)
 		if resp != nil {

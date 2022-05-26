@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
 )
 
@@ -40,8 +41,10 @@ func (s *_baseImpl) Get(ctx context.Context, key string) (*Command, redis.Cmder)
 		return nil, cmd
 	}
 	v := codec.Decode(data)
-	if v.ExpireAt() > uint64(time.Now().Unix()) {
-		return s.Delete(ctx, key), nil
+	if v.ExpireAt() <= uint64(time.Now().Unix()) {
+		cmd := redis.NewStatusCmd(ctx)
+		cmd.SetVal(kverror.ErrNotFound.Error())
+		return s.Delete(ctx, key), cmd
 	}
 	cmd := redis.NewStringCmd(ctx)
 	cmd.SetVal(v.String())
