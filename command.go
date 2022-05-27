@@ -3,47 +3,65 @@ package gokv
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/yixinin/gokv/codec"
 )
 
-type CmdType int
+type CommitOP int
 
 const (
-	// CmdQuorumGet quorum get a key
-	CmdGet CmdType = 1
-	// CmdPut put key value
-	CmdSet CmdType = 2
-	// CmdDelete delete a key
-	CmdDelete CmdType = 3
+	CommitOPSet CommitOP = 1
+	CommitOPDel CommitOP = 2
 )
 
-func (t CmdType) String() string {
+func (t CommitOP) String() string {
 	switch t {
-	case CmdGet:
-		return "get"
-	case CmdSet:
+	case CommitOPSet:
 		return "set"
-	case CmdDelete:
+	case CommitOPDel:
 		return "del"
 	}
 	return strconv.Itoa(int(t))
 }
 
 // Command a raft op command
-type Command struct {
-	OP    CmdType `json:"op"`
-	Key   []byte  `json:"k"`
-	Value []byte  `json:"v"`
+type Commit struct {
+	OP    CommitOP `json:"op"`
+	Key   []byte   `json:"k"`
+	Value []byte   `json:"v"`
 }
 
-func (c *Command) String() string {
+func (c *Commit) String() string {
 	switch c.OP {
-	case CmdGet:
-		return fmt.Sprintf("Get %v", string(c.Key))
-	case CmdSet:
+	case CommitOPSet:
 		return fmt.Sprintf("Set %s %s", string(c.Key), string(c.Value))
-	case CmdDelete:
+	case CommitOPDel:
 		return fmt.Sprintf("Delete %s", string(c.Key))
 	default:
 		return "<Invalid>"
+	}
+}
+
+func NewSetCommit(key, val []byte, ex ...uint64) *Commit {
+	ct := &Commit{
+		OP:  CommitOPSet,
+		Key: key,
+	}
+	data := codec.Encode(val, ex...)
+	ct.Value = data.Raw()
+	return ct
+}
+func NewSetRawCommit(key, data []byte) *Commit {
+	return &Commit{
+		OP:    CommitOPSet,
+		Key:   key,
+		Value: data,
+	}
+}
+
+func NewDelCommit(key []byte) *Commit {
+	return &Commit{
+		OP:  CommitOPDel,
+		Key: key,
 	}
 }

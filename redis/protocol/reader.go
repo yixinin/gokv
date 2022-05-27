@@ -94,7 +94,6 @@ func (r *Reader) ReadRequest(m MultiBulkParse) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	switch line[0] {
 	case ErrorReply:
 		return nil, ParseErrorReply(line)
@@ -139,19 +138,19 @@ func SliceParser(rd *Reader, n int64) (interface{}, error) {
 	return vals, nil
 }
 
-func (r *Reader) readStringReply(line []byte) (string, error) {
+func (r *Reader) readStringReply(line []byte) ([]byte, error) {
 	replyLen, err := codec.Atoi(line[1:])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	b := make([]byte, replyLen+2)
 	_, err = io.ReadFull(r.rd, b)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return codec.BytesToString(b[:replyLen]), nil
+	return b[:replyLen], nil
 }
 
 func ParseErrorReply(line []byte) error {

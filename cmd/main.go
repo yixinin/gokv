@@ -15,7 +15,10 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"os"
+	"os/signal"
 
 	"github.com/yixinin/gokv"
 )
@@ -29,10 +32,15 @@ func main() {
 	// load config
 	cfg := gokv.LoadConfig(*confFile, *nodeID)
 
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt)
 	// init log
 	// log.InitFileLog(cfg.ServerCfg.LogPath, fmt.Sprintf("node%d", *nodeID), cfg.ServerCfg.LogLevel)
-
+	var ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
 	// start server
 	server := gokv.NewServer(*nodeID, cfg)
-	server.Run()
+	go server.Run(ctx)
+	<-ch
+	cancel()
 }

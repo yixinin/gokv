@@ -24,7 +24,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/tiglabs/raft"
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/storage/wal"
@@ -51,6 +50,8 @@ type Server struct {
 
 	*_baseImpl
 	*_netImpl
+	*_numImpl
+	*_ttlImpl
 	db kvstore.Kvstore // we use leveldb to store key-value data
 }
 
@@ -69,18 +70,18 @@ func NewServer(nodeID uint64, cfg *Config) *Server {
 }
 
 // Run run server
-func (s *Server) Run() {
+func (s *Server) Run(ctx context.Context) {
 	// init store
-	s.initLeveldb()
+	s.initLeveldb(ctx)
 	// start raft
-	s.startRaft()
+	s.startRaft(ctx)
 	// start tcp server
-	s.initTcp()
+	s.initTcp(ctx)
 }
 
-func (s *Server) initTcp() {
+func (s *Server) initTcp(ctx context.Context) {
 	node := s.cfg.FindClusterNode(s.nodeID)
-	s._netImpl.listen(context.Background(), uint16(node.HTTPPort))
+	s._netImpl.listen(ctx, uint16(node.HTTPPort))
 }
 
 // Stop stop server
@@ -105,7 +106,7 @@ func (s *Server) Stop(ctx context.Context) {
 	}
 }
 
-func (s *Server) initLeveldb() {
+func (s *Server) initLeveldb(ctx context.Context) {
 	if s.cfg.ServerCfg.DataPath == "memdb" {
 		s.db = kvstore.NewMemDB()
 		return
@@ -118,10 +119,13 @@ func (s *Server) initLeveldb() {
 	s.db = db
 	s._netImpl = NewNetImpl(s)
 	s._baseImpl = NewBaseImpl(s.db)
+	s._numImpl = NewNumImpl(s.db)
+	s._ttlImpl = NewTTLImpl(s.db)
+
 	log.Info("init leveldb sucessfully. path: %v", dbPath)
 }
 
-func (s *Server) startRaft() {
+func (s *Server) startRaft(ctx context.Context) {
 	// logger.SetLogger(log.GetFileLogger())
 
 	// start raft server
@@ -165,8 +169,7 @@ func (s *Server) startRaft() {
 
 // Apply implement raft StateMachine Apply method
 func (s *Server) Apply(command []byte, index uint64) (interface{}, error) {
-
-	var cmds []Command
+	var cmds []Commit
 	err := json.Unmarshal(command, &cmds)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal command failed: %v", command)
@@ -174,28 +177,32 @@ func (s *Server) Apply(command []byte, index uint64) (interface{}, error) {
 
 	var ctx = context.Background()
 	for _, cmd := range cmds {
-		log.Debug("apply command at index(%v):%s -> %s", index, cmd.OP, cmd.Key)
-		if cmd.OP != CmdDelete {
-			v := codec.Decode(cmd.Value)
-			log.Debug("val: %s,%d", v.String(), v.ExpireAt())
-		}
 		switch cmd.OP {
-		case CmdSet:
+		case CommitOPSet:
+			go func(ctx context.Context) {
+				v := codec.Decode(cmd.Value)
+				val := v.String()
+				ex := v.ExpireAt()
+				if ex > 0 {
+					log.Debug("apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Kitchen), cmd.Value)
+				} else {
+					log.Debug("apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
+				}
+
+			}(ctx)
+
 			err := s.db.Set(ctx, cmd.Key, cmd.Value)
 			if err != nil {
 				return nil, err
 			}
-			resp := redis.NewStatusCmd(ctx)
-			resp.SetVal("OK")
-			return resp, nil
-		case CmdDelete:
+			return "OK", nil
+		case CommitOPDel:
+			log.Debug("apply del command at index(%v) -> %s", index, cmd.Key)
 			err := s.db.Delete(ctx, cmd.Key)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
-			resp := redis.NewStatusCmd(ctx)
-			resp.SetVal("OK")
-			return resp, nil
+			return "OK", nil
 		default:
 			return nil, fmt.Errorf("invalid cmd type: %v", cmd.OP)
 		}
@@ -231,43 +238,42 @@ func (s *Server) HandleLeaderChange(leader uint64) {
 	s.leader = leader
 }
 
-func (s *Server) StartCommit(ctx context.Context) (func(cmds ...*Command) redis.Cmder, redis.Cmder) {
-	var commit = func(cmds ...*Command) redis.Cmder {
-		cmd, err := s.process(ctx, cmds)
-		if err != nil {
-			return cmd
-		}
-		return cmd
+func (s *Server) StartCommit(ctx context.Context) (func(cmds ...*Commit) (resMsg, errMsg string), *ClusterNode) {
+	var commit = func(cmds ...*Commit) (resMsg, errMsg string) {
+		return s.process(ctx, cmds)
 	}
 	if s.leader != s.nodeID {
 		// s.replyNotLeader(w)
-		return commit, redis.NewCmd(ctx, "not leader")
+		node := s.cfg.FindClusterNode(s.leader)
+		return commit, node
 	}
 	return commit, nil
 }
 
-func (s *Server) process(ctx context.Context, cmds []*Command) (redis.Cmder, error) {
-	log.Debug("start process commands: %v", cmds)
+func (s *Server) process(ctx context.Context, cmds []*Commit) (resMsg, errMsg string) {
 	data, err := json.Marshal(cmds)
 	if err != nil {
 		log.Error("marshal raft command failed: %v", err)
-		// w.WriteHeader(http.StatusInternalServerError)
-		return nil, err
+		errMsg = err.Error()
+		return
 	}
 
 	f := s.rs.Submit(DefaultClusterID, data)
 	respCh, errCh := f.AsyncResponse()
 	select {
 	case resp := <-respCh:
-		if cmd, ok := resp.(redis.Cmder); ok {
-			return cmd, nil
+		if msg, ok := resp.(string); ok {
+			return msg, ""
 		}
+		resMsg = fmt.Sprint(resp)
+		return
 	case err := <-errCh:
-		return nil, err
+		errMsg = err.Error()
+		return
 	case <-time.After(DefaultRequestTimeout):
-		return nil, os.ErrDeadlineExceeded
+		errMsg = "commit timeout"
+		return
 	}
-	return nil, nil
 }
 
 func (s *Server) getByReadIndex(ctx context.Context, key string) ([]byte, error) {

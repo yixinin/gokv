@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"encoding/binary"
+	"strconv"
 )
 
 const (
@@ -17,6 +18,11 @@ func Int642Bytes(i int64) []byte {
 	binary.Write(bytesBuffer, binary.BigEndian, i)
 	return bytesBuffer.Bytes()
 }
+func Uint642Bytes(i uint64) []byte {
+	bytesBuffer := bytes.NewBuffer(make([]byte, 0, ExpireSize))
+	binary.Write(bytesBuffer, binary.BigEndian, i)
+	return bytesBuffer.Bytes()
+}
 
 func Bytes2Int64(b []byte) int64 {
 	var i int64
@@ -24,6 +30,17 @@ func Bytes2Int64(b []byte) int64 {
 	return i
 }
 
+func StringBytes2Int64(b []byte) (int64, bool) {
+	s := BytesToString(b)
+	i, err := strconv.ParseInt(s, 10, 64)
+	return i, err == nil
+}
+
+func StringBytes2Uint64(b []byte) (uint64, bool) {
+	s := string(b)
+	i, err := strconv.ParseUint(s, 10, 64)
+	return i, err == nil
+}
 func Float2Bytes(f float64) []byte {
 	bytesBuffer := bytes.NewBuffer(make([]byte, 0, ExpireSize))
 	binary.Write(bytesBuffer, binary.BigEndian, f)

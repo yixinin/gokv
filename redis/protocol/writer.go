@@ -4,17 +4,20 @@ import (
 	"encoding"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"time"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
 )
 
 type writer interface {
 	io.Writer
-	// io.ByteWriter
+	io.ByteWriter
 	// io.StringWriter
-	// WriteString(s string) (n int, err error)
+	WriteString(s string) (n int, err error)
 }
 
 type Writer struct {
@@ -33,8 +36,12 @@ func NewWriter(wr writer) *Writer {
 	}
 }
 
+func (w *Writer) WriteCmd(cmd redis.Cmder) error {
+	return w.string(cmd.String())
+}
+
 func (w *Writer) WriteArgs(args []interface{}) error {
-	if _, err := w.Write([]byte{ArrayReply}); err != nil {
+	if err := w.WriteByte(ArrayReply); err != nil {
 		return err
 	}
 
@@ -65,7 +72,7 @@ func (w *Writer) WriteArg(v interface{}) error {
 	case string:
 		return w.string(v)
 	case []byte:
-		return w.bytes(v)
+		return w.bytes(StringReply, v)
 	case int:
 		return w.int(int64(v))
 	case int8:
@@ -97,7 +104,7 @@ func (w *Writer) WriteArg(v interface{}) error {
 		return w.int(0)
 	case time.Time:
 		w.numBuf = v.AppendFormat(w.numBuf[:0], time.RFC3339Nano)
-		return w.bytes(w.numBuf)
+		return w.bytes(IntReply, w.numBuf)
 	case time.Duration:
 		return w.int(v.Nanoseconds())
 	case encoding.BinaryMarshaler:
@@ -105,44 +112,37 @@ func (w *Writer) WriteArg(v interface{}) error {
 		if err != nil {
 			return err
 		}
-		return w.bytes(b)
+		return w.bytes(StringReply, b)
+	case net.IP:
+		return w.bytes(StringReply, v)
 	default:
 		return fmt.Errorf(
 			"redis: can't marshal %T (implement encoding.BinaryMarshaler)", v)
 	}
 }
 
-func (w *Writer) WriteString(s string) error {
-	return w.string(s)
+func (w *Writer) WriteMessage(msg string) error {
+	return w.bytes(StringReply, codec.StringToBytes(msg))
 }
 
-func (w *Writer) WriteStatus(s string) error {
-	if _, err := w.Write([]byte{StatusReply}); err != nil {
-		return err
-	}
-	if _, err := w.Write(codec.StringToBytes(s)); err != nil {
-		return err
-	}
-	return w.crlf()
+func (w *Writer) WriteWrongArgs(args []interface{}) error {
+	msg := fmt.Sprintf("args[%v] error", args)
+	return w.bytes(StringReply, codec.StringToBytes(msg))
+}
+func (w *Writer) WriteNotLeader(host string, port uint32) error {
+	msg := fmt.Sprintf("leader %s:%d", host, port)
+	return w.bytes(StringReply, codec.StringToBytes(msg))
 }
 
-func (w *Writer) WriteError(s string) error {
-	if _, err := w.Write([]byte{ErrorReply}); err != nil {
+func (w *Writer) bytes(t byte, b []byte) error {
+	log.Debug("write %d->%s", t, b)
+	if err := w.WriteByte(t); err != nil {
 		return err
 	}
-	if _, err := w.Write(codec.StringToBytes(s)); err != nil {
-		return err
-	}
-	return w.crlf()
-}
-
-func (w *Writer) bytes(b []byte) error {
-	if _, err := w.Write([]byte{StringReply}); err != nil {
-		return err
-	}
-
-	if err := w.writeLen(len(b)); err != nil {
-		return err
+	if t == StringReply || t == ArrayReply {
+		if err := w.writeLen(len(b)); err != nil {
+			return err
+		}
 	}
 
 	if _, err := w.Write(b); err != nil {
@@ -153,28 +153,27 @@ func (w *Writer) bytes(b []byte) error {
 }
 
 func (w *Writer) string(s string) error {
-	return w.bytes(codec.StringToBytes(s))
+	return w.bytes(StringReply, codec.StringToBytes(s))
 }
 
 func (w *Writer) uint(n uint64) error {
 	w.numBuf = strconv.AppendUint(w.numBuf[:0], n, 10)
-	return w.bytes(w.numBuf)
+	return w.bytes(IntReply, w.numBuf)
 }
 
 func (w *Writer) int(n int64) error {
 	w.numBuf = strconv.AppendInt(w.numBuf[:0], n, 10)
-	return w.bytes(w.numBuf)
+	return w.bytes(IntReply, w.numBuf)
 }
 
 func (w *Writer) float(f float64) error {
 	w.numBuf = strconv.AppendFloat(w.numBuf[:0], f, 'f', -1, 64)
-	return w.bytes(w.numBuf)
+	return w.bytes(IntReply, w.numBuf)
 }
 
 func (w *Writer) crlf() error {
-	if _, err := w.Write([]byte{'\r'}); err != nil {
+	if err := w.WriteByte('\r'); err != nil {
 		return err
 	}
-	_, err := w.Write([]byte{'\n'})
-	return err
+	return w.WriteByte('\n')
 }

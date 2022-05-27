@@ -1,6 +1,7 @@
 package gokv
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -8,28 +9,38 @@ import (
 	"time"
 
 	"github.com/tiglabs/raft/util/log"
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
-	raft "go.etcd.io/etcd/raft/v3"
 )
 
-type Cmd struct {
+const (
+	SetOK = "OK"
+)
+
+type Message struct {
 	Addr net.Addr
-	Cmd  []interface{}
-	raft.Peer
+	args []interface{}
 }
 
 type _netImpl struct {
 	lis       net.Listener
-	clients   map[string]net.Conn
-	clientCmd chan Cmd
+	clients   map[string]*Client
+	clientCmd chan Message
 	s         *Server
+}
+
+type Client struct {
+	conn net.Conn
+	rd   *protocol.Reader
+	bw   *bufio.Writer
+	wr   *protocol.Writer
 }
 
 func NewNetImpl(s *Server) *_netImpl {
 	return &_netImpl{
-		clients:   make(map[string]net.Conn),
-		clientCmd: make(chan Cmd),
+		clients:   make(map[string]*Client),
+		clientCmd: make(chan Message),
 		s:         s,
 	}
 }
@@ -45,7 +56,7 @@ func (n *_netImpl) listen(ctx context.Context, port uint16) error {
 	if err != nil {
 		return err
 	}
-	logger.Info(ctx, "listen on", port)
+	logger.Info(ctx, "listen on ", port)
 	n.lis = lis
 
 	go n.receive(ctx)
@@ -59,42 +70,61 @@ func (n *_netImpl) listen(ctx context.Context, port uint16) error {
 			if err != nil {
 				return err
 			}
-			go n.addClient(ctx, conn)
+			go n.tcpReceive(ctx, conn)
 		}
 	}
 }
 
-func (n *_netImpl) addClient(ctx context.Context, conn net.Conn) {
-	err := conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-	if err != nil {
-		logger.Error(ctx, err)
-		return
+func (n *_netImpl) tcpReceive(ctx context.Context, conn net.Conn) {
+	// err := conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	// if err != nil {
+	// 	logger.Error(ctx, err)
+	// 	return
+	// }
+	c := &Client{
+		conn: conn,
+		rd:   protocol.NewReader(conn),
+		bw:   bufio.NewWriter(conn),
 	}
-	n.clients[conn.RemoteAddr().String()] = conn
-	rd := protocol.NewReader(conn)
-	for {
-		cmd, err := rd.ReadRequest(protocol.SliceParser)
-		if os.IsTimeout(err) {
-			continue
-		}
+	c.wr = protocol.NewWriter(c.bw)
 
-		if err != nil {
-			logger.Error(ctx, err)
+	n.clients[conn.RemoteAddr().String()] = c
+	defer c.conn.Close()
+	defer delete(n.clients, conn.RemoteAddr().String())
+loop:
+	for {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		switch cmd := cmd.(type) {
-		case []interface{}:
-			n.clientCmd <- Cmd{
-				Addr: conn.RemoteAddr(),
-				Cmd:  cmd,
-			}
-		case string, interface{}:
-			n.clientCmd <- Cmd{
-				Addr: conn.RemoteAddr(),
-				Cmd:  []interface{}{cmd},
-			}
 		default:
-			logger.Info(ctx, "wrong cmd", cmd)
+			err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
+			if err != nil {
+				log.Error("set client conn timeout error:%v, this conn will disconnect", err)
+				return
+			}
+			cmd, err := c.rd.ReadRequest(protocol.SliceParser)
+			if os.IsTimeout(err) {
+				continue loop
+			}
+
+			if err != nil {
+				log.Error("receive redis cmd error:%v, this conn will disconnect", err)
+				return
+			}
+			switch cmd := cmd.(type) {
+			case []interface{}:
+				n.clientCmd <- Message{
+					Addr: conn.RemoteAddr(),
+					args: cmd,
+				}
+			case []byte, string, interface{}:
+				n.clientCmd <- Message{
+					Addr: conn.RemoteAddr(),
+					args: []interface{}{cmd},
+				}
+			default:
+				logger.Info(ctx, "wrong cmd", cmd)
+			}
 		}
 	}
 }
@@ -105,85 +135,158 @@ func (n *_netImpl) receive(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case cmd := <-n.clientCmd:
-			n.handleCmd(context.Background(), cmd.Addr, cmd.Cmd)
+			go n.handleCmd(context.Background(), cmd.Addr, cmd.args)
 		}
 	}
 }
 
-func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interface{}) {
-	if len(args) == 0 {
-		logger.Info(ctx, "empty cmd")
-		return
-	}
-	log.Debug("cmd args %v", args)
-	cmd, ok := args[0].(string)
-	if !ok {
-		logger.Info(ctx, "wrong cmd", args)
-		return
-	}
+func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interface{}) error {
 	client, ok := n.clients[addr.String()]
 	if !ok {
 		logger.Info(ctx, "client disconnected", addr.String())
-		return
+		return nil
 	}
-	w := protocol.NewWriter(client)
-	switch cmd {
+	if len(args) == 0 {
+		return client.wr.WriteWrongArgs(args)
+	}
+	var formatedArgs = make([]string, 0, len(args))
+	for i := range args {
+		switch arg := args[i].(type) {
+		case []byte:
+			formatedArgs = append(formatedArgs, fmt.Sprintf("%s", arg))
+		default:
+			formatedArgs = append(formatedArgs, fmt.Sprint(arg))
+		}
+	}
+	log.Debug("cmd %v", formatedArgs)
+	cmd, ok := args[0].([]byte)
+	if !ok {
+		return client.wr.WriteWrongArgs(args)
+	}
+	defer client.bw.Flush()
+	switch codec.BytesToString(cmd) {
 	case "set":
-		commit, resp := n.s.StartCommit(ctx)
-		if resp != nil {
-			w.WriteString(resp.String())
-			return
+		commit, leader := n.s.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
 		}
-		setCmd, ok := protocol.NewSetCmd(args)
+		cmd, ok := protocol.NewSetCmd(args)
 		if !ok {
-			logger.Info(ctx, "wrong cmd", args)
-			return
+			return client.wr.WriteWrongArgs(args)
 		}
-		cmd := n.s.Set(ctx, setCmd.Key, setCmd.Val, setCmd.Expire)
-		resp = commit(cmd)
-		fmt.Println(resp)
-		w.WriteString(resp.String())
+		ct := n.s.Set(ctx, cmd)
+		if ok, message := commit(ct); ok != "" {
+			return client.wr.WriteMessage(ok)
+		} else {
+			return client.wr.WriteMessage(message)
+		}
 	case "get":
-		commit, clusterResp := n.s.StartCommit(ctx)
-		log.Debug("start get commit")
-		keyCmd, ok := protocol.NewKeyCmd(args)
+		commit, leader := n.s.StartCommit(ctx)
+		cmd, ok := protocol.NewGetCmd(args)
 		if !ok {
-			logger.Info(ctx, "wrong cmd", args)
-			return
+			return client.wr.WriteWrongArgs(args)
 		}
-		log.Debug("new key cmd")
-		cmd, resp := n.s.Get(ctx, keyCmd.Key)
-		log.Debug("kv get")
-		if cmd != nil && clusterResp == nil {
-			go commit(cmd)
+		ct := n.s.Get(ctx, cmd)
+		if ct != nil && leader == nil {
+			go commit(ct)
 		}
-		log.Debug("response")
-		w.WriteString(resp.String())
-		return
+		cmd.Write(client.wr)
 	case "del":
-		commit, resp := n.s.StartCommit(ctx)
-		if resp != nil {
-			w.WriteString(resp.String())
-			return
+		commit, leader := n.s.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
 		}
-		keyCmd, ok := protocol.NewKeyCmd(args)
+		keyCmd, ok := protocol.NewDelCmd(args)
 		if !ok {
-			logger.Info(ctx, "wrong cmd", args)
-			return
+			return client.wr.WriteWrongArgs(args)
 		}
-		cmd := n.s.Delete(ctx, keyCmd.Key)
-		resp = commit(cmd)
-		w.WriteString(resp.String())
+		cmd := n.s.Delete(ctx, keyCmd.BaseCmd)
+		if ok, message := commit(cmd); ok != "" {
+			return client.wr.WriteMessage(ok)
+		} else {
+			return client.wr.WriteMessage(message)
+		}
 	case "ttl":
+		commit, leader := n.s.StartCommit(ctx)
+		cmd, ok := protocol.NewTTLCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.s.TTL(ctx, cmd)
+		if commit != nil && leader == nil {
+			go commit(ct)
+		}
+		return cmd.Write(client.wr)
 	case "expire":
+		commit, leader := n.s.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewExpirecmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.s.ExpireAt(ctx, cmd)
+		if ct != nil {
+			ok, msg := commit(ct)
+			if ok != "" {
+				cmd.Message = ok
+			}
+			if msg != "" {
+				cmd.Message = msg
+			}
+		}
+		return cmd.Write(client.wr)
 	case "hset":
 	case "hget":
 	case "hgetall":
+	case "incrby":
+		commit, leader := n.s.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewIncrByCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.s.Incr(ctx, cmd)
+		if ct != nil {
+			ok, msg := commit(ct)
+			if ok != SetOK {
+				cmd.Val = 0
+				cmd.Message = ok
+			}
+			if msg != "" {
+				cmd.Message = msg
+			}
+		}
+		cmd.Write(client.wr)
 	case "incr":
-	case "COMMAND":
-		buf, _ := os.ReadFile("cache/cmd.txt")
-		w.Write(buf)
+		commit, leader := n.s.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewIncrCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.s.Incr(ctx, cmd)
+		if ct != nil {
+			ok, e := commit(ct)
+			if ok != SetOK {
+				cmd.Val = 0
+				cmd.Message = ok
+			}
+			if e != "" {
+				cmd.Message = e
+			}
+		}
+		return cmd.Write(client.wr)
+	case "command":
+		log.Debug("commands none")
+		return protocol.NewCommandsInfoCmd().Write(client.wr)
 	default:
-		fmt.Println("unsurpport command", args)
+		return client.wr.WriteWrongArgs(args)
 	}
+	return nil
 }

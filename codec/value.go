@@ -3,7 +3,6 @@ package codec
 import (
 	"encoding/binary"
 	"strconv"
-	"time"
 )
 
 type Value struct {
@@ -35,7 +34,7 @@ func (v Value) SetExpireAt(ex uint64) {
 
 }
 
-func (v Value) Set(val string) {
+func (v Value) Set(val []byte) {
 	nv := Encode(val, v.ExpireAt())
 	v.CopyFrom(nv)
 }
@@ -90,11 +89,11 @@ func (v Value) ExpireAt() uint64 {
 	return v.e
 }
 
-func (v Value) Expired() bool {
+func (v Value) Expired(now uint64) bool {
 	if v.e == 0 {
 		return false
 	}
-	return time.Now().Unix() > int64(v.e)
+	return now > v.e
 }
 
 func (v Value) Type() uint8 {
@@ -142,6 +141,10 @@ func (v Value) Bytes() []byte {
 	return v.data[HeaderSize:]
 }
 
+func (v Value) StringVal() []byte {
+	return StringToBytes(v.String())
+}
+
 func (v Value) SavedData() []byte {
 	return v.data
 }
@@ -163,7 +166,7 @@ const (
 	NegativeByte = '-'
 )
 
-func getValType(val string) uint8 {
+func getValType(val []byte) uint8 {
 	var size = len(val)
 	if size == 0 {
 		return NIL

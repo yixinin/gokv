@@ -1,90 +1,108 @@
 package gokv
 
-// import (
-// 	"context"
-// 	"log"
-// 	"runtime/debug"
-// 	"time"
+import (
+	"context"
+	"log"
+	"runtime/debug"
+	"time"
 
-// 	"github.com/yixinin/gokv/codec"
-// 	"github.com/yixinin/gokv/kverror"
-// )
+	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
+	"github.com/yixinin/gokv/kvstore"
+	"github.com/yixinin/gokv/redis/protocol"
+)
 
-// type _ttlImpl struct {
-// 	cmd *CmdContainer
-// }
+type _ttlImpl struct {
+	kv kvstore.Kvstore
+}
 
-// func (t *_ttlImpl) ExpireAt(ctx context.Context, key string, expireAt uint64) error {
-// 	var nowUnix = uint64(time.Now().Unix())
-// 	data, err := t.cmd.Get(ctx, key)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	v := codec.Decode(data)
-// 	oldExpireAt := v.ExpireAt()
-// 	if (oldExpireAt != 0 && oldExpireAt <= nowUnix) ||
-// 		(expireAt != 0 && expireAt <= nowUnix) {
-// 		_ = t.cmd.Delete(ctx, key)
-// 		return kverror.ErrNotFound
-// 	}
-// 	v.SetExpireAt(expireAt)
-// 	return t.cmd.SetRaw(ctx, key, v.Raw())
-// }
+func NewTTLImpl(kv kvstore.Kvstore) *_ttlImpl {
+	return &_ttlImpl{
+		kv: kv,
+	}
+}
 
-// func (t *_ttlImpl) TTL(ctx context.Context, key string) int64 {
-// 	var nowUnix = uint64(time.Now().Unix())
-// 	data, err := t.cmd.Get(ctx, key)
-// 	if err != nil {
-// 		return -2
-// 	}
-// 	v := codec.Decode(data)
-// 	expireAt := v.ExpireAt()
-// 	if expireAt == 0 {
-// 		return -1
-// 	}
-// 	if expireAt != 0 && expireAt <= nowUnix {
-// 		_ = t.cmd.Delete(ctx, key)
-// 		return -2
-// 	}
-// 	return int64(expireAt - nowUnix)
-// }
+func (t *_ttlImpl) ExpireAt(ctx context.Context, ex *protocol.ExpireCmd) *Commit {
+	data, err := t.kv.Get(ctx, ex.Key)
+	if err != nil {
+		ex.Message = err.Error()
+		return nil
+	}
+	v := codec.Decode(data)
+	if v.Expired(ex.Now) {
+		ex.Message = kverror.ErrNotFound.Error()
+		return nil
+	}
+	if ex.EX > 0 && ex.Now >= ex.EX {
+		ex.Message = kverror.ErrNotFound.Error()
+		return NewDelCommit(ex.Key)
+	}
 
-// func (t *KvEngine) GC(ctx context.Context) {
-// 	defer func() {
-// 		if r := recover(); r != nil {
-// 			log.Println(r, string(debug.Stack()))
-// 		}
-// 	}()
+	v.SetExpireAt(ex.EX)
 
-// 	var ticker = time.NewTicker(time.Second)
-// 	defer ticker.Stop()
-// 	var prevKey []byte
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return
-// 		case <-ticker.C:
-// 			func() {
-// 				defer recover()
-// 				cmd, commit := t.BaseCmd()
-// 				defer commit()
-// 				var nowUnix = uint64(time.Now().Unix())
-// 				var i int
+	return NewSetRawCommit(ex.Key, v.Raw())
+}
 
-// 				t._kv.Scan(ctx, func(key, data []byte) {
-// 					expireAt := codec.Decode(data).ExpireAt()
-// 					if expireAt != 0 && expireAt <= nowUnix {
-// 						_ = cmd.Delete(ctx, codec.BytesToString(key))
-// 					}
-// 					prevKey = key
-// 					i++
-// 				}, 1000, prevKey)
+func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
+	data, err := t.kv.Get(ctx, ttl.Key)
+	if err != nil {
+		ttl.Message = err.Error()
+		return nil
+	}
+	v := codec.Decode(data)
+	if v.Expired(ttl.Now) {
+		ttl.TTL = -2
+		return NewDelCommit(ttl.Key)
+	}
 
-// 				if i == 0 {
-// 					prevKey = []byte{}
-// 				}
-// 			}()
+	if v.ExpireAt() == 0 {
+		ttl.TTL = -1
+		return nil
+	}
+	ttl.TTL = int64(v.ExpireAt() - ttl.Now)
+	return nil
+}
 
-// 		}
-// 	}
-// }
+func (t *Server) GC(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println(r, string(debug.Stack()))
+		}
+	}()
+
+	var ticker = time.NewTicker(time.Second)
+	defer ticker.Stop()
+	var prevKey []byte
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if t.leader != t.nodeID {
+				continue loop
+			}
+			var batch = 10
+			func() {
+				defer recover()
+				commit, _ := t.StartCommit(ctx)
+				var nowUnix = uint64(time.Now().Unix())
+				var i int
+				var cts = make([]*Commit, 0, batch)
+				t.db.Scan(ctx, func(key, data []byte) {
+					if codec.Decode(data).Expired(nowUnix) {
+						cts = append(cts, NewDelCommit(key))
+					}
+					prevKey = key
+					i++
+				}, batch, prevKey)
+
+				if i == 0 {
+					prevKey = []byte{}
+				}
+				commit(cts...)
+			}()
+
+		}
+	}
+}
