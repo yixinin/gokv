@@ -77,6 +77,7 @@ type GetCmd struct {
 
 	Val     []byte
 	Message string
+	Nil     bool
 }
 
 func NewGetCmd(args []interface{}) (*GetCmd, bool) {
@@ -88,6 +89,9 @@ func NewGetCmd(args []interface{}) (*GetCmd, bool) {
 }
 
 func (c *GetCmd) Write(w *Writer) error {
+	if c.Nil {
+		return w.nil(StringReply)
+	}
 	if c.Message != "" {
 		return w.string(c.Message)
 	}
@@ -230,4 +234,33 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 func (c *CommandsInfoCmd) Write(w *Writer) error {
 	err := w.WriteMessage("no")
 	return err
+}
+
+type SentinelCmd struct {
+	SubCmd     string
+	MasterAddr [2]string
+	SlaveAddrs [][]string
+}
+
+func NewSentinelCmd(args []interface{}) *SentinelCmd {
+	if len(args) < 2 {
+		return &SentinelCmd{}
+	}
+	return &SentinelCmd{
+		SubCmd: codec.BytesToString(args[1].([]byte)),
+	}
+}
+
+func (c *SentinelCmd) Write(w *Writer) error {
+	switch c.SubCmd {
+	case "sentinels":
+		w.WriteByte(ArrayReply)
+		w.writeLen(len(c.SlaveAddrs))
+		for _, v := range c.SlaveAddrs {
+			w.WriteArray(v...)
+		}
+	case "get-master-addr-by-name":
+		return w.WriteArray(c.MasterAddr[:]...)
+	}
+	return nil
 }

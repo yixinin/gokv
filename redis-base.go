@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/redis/protocol"
 )
@@ -30,6 +31,9 @@ func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Commit {
 func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) *Commit {
 	data, err := s.kv.Get(ctx, cmd.Key)
 	if err != nil {
+		if err == kverror.ErrNotFound {
+			cmd.Nil = true
+		}
 		cmd.Message = err.Error()
 		return nil
 	}

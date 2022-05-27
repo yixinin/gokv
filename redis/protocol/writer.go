@@ -13,6 +13,9 @@ import (
 	"github.com/yixinin/gokv/codec"
 )
 
+var NIL = []byte("-1")
+var PONG = []byte("PONG")
+
 type writer interface {
 	io.Writer
 	io.ByteWriter
@@ -125,13 +128,35 @@ func (w *Writer) WriteMessage(msg string) error {
 	return w.bytes(StringReply, codec.StringToBytes(msg))
 }
 
+func (w *Writer) WriteArray(msg ...string) error {
+	w.WriteByte(ArrayReply)
+	w.writeLen(len(msg))
+	for i := range msg {
+		w.WriteByte(StringReply)
+		w.writeLen(len(msg[i]))
+		w.WriteString(msg[i])
+		w.crlf()
+	}
+
+	return nil
+}
+
+func (w *Writer) Pong() error {
+	return w.bytes(StatusReply, PONG)
+}
+
 func (w *Writer) WriteWrongArgs(args []interface{}) error {
 	msg := fmt.Sprintf("args[%v] error", args)
 	return w.bytes(StringReply, codec.StringToBytes(msg))
 }
 func (w *Writer) WriteNotLeader(host string, port uint32) error {
+	w.WriteByte(ErrorReply)
 	msg := fmt.Sprintf("leader %s:%d", host, port)
 	return w.bytes(StringReply, codec.StringToBytes(msg))
+}
+func (w *Writer) Close() error {
+	_, err := w.Write([]byte("EOF"))
+	return err
 }
 
 func (w *Writer) bytes(t byte, b []byte) error {
@@ -154,6 +179,16 @@ func (w *Writer) bytes(t byte, b []byte) error {
 
 func (w *Writer) string(s string) error {
 	return w.bytes(StringReply, codec.StringToBytes(s))
+}
+func (w *Writer) nil(t byte) error {
+	if err := w.WriteByte(t); err != nil {
+		return err
+	}
+	if _, err := w.Write(NIL); err != nil {
+		return err
+	}
+
+	return w.crlf()
 }
 
 func (w *Writer) uint(n uint64) error {

@@ -14,3 +14,4 @@ cmd/node1/cmd
 cmd/node2/cmd
 cmd/node3/cmd
 
+__debug_bin.exe

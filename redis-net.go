@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tiglabs/raft/util/log"
@@ -95,6 +96,7 @@ loop:
 	for {
 		select {
 		case <-ctx.Done():
+			c.wr.Close()
 			return
 		default:
 			err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
@@ -153,7 +155,7 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 	for i := range args {
 		switch arg := args[i].(type) {
 		case []byte:
-			formatedArgs = append(formatedArgs, fmt.Sprintf("%s", arg))
+			formatedArgs = append(formatedArgs, string(arg))
 		default:
 			formatedArgs = append(formatedArgs, fmt.Sprint(arg))
 		}
@@ -164,7 +166,7 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 		return client.wr.WriteWrongArgs(args)
 	}
 	defer client.bw.Flush()
-	switch codec.BytesToString(cmd) {
+	switch strings.ToLower(codec.BytesToString(cmd)) {
 	case "set":
 		commit, leader := n.s.StartCommit(ctx)
 		if leader != nil {
@@ -285,6 +287,23 @@ func (n *_netImpl) handleCmd(ctx context.Context, addr net.Addr, args []interfac
 	case "command":
 		log.Debug("commands none")
 		return protocol.NewCommandsInfoCmd().Write(client.wr)
+	case "ping":
+		return client.wr.Pong()
+	case "sentinel":
+		cmd := protocol.NewSentinelCmd(args)
+		leader := n.s.getLeader()
+		if leader != nil {
+			cmd.MasterAddr[0] = leader.Host
+			cmd.MasterAddr[1] = fmt.Sprint(leader.HTTPPort)
+		}
+		for _, node := range n.s.cfg.ClusterCfg.Nodes {
+			if node == leader {
+				continue
+			}
+			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"ip", node.Host})
+			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"port", fmt.Sprint(node.HTTPPort)})
+		}
+		return cmd.Write(client.wr)
 	default:
 		return client.wr.WriteWrongArgs(args)
 	}

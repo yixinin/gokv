@@ -4,19 +4,29 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 )
 
 func TestRedisCli(t *testing.T) {
-	c := redis.NewClient(&redis.Options{
-		Addr: "localhost:6579",
+	c := redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName: "xx",
+		SentinelAddrs: []string{
+			"localhost:6479",
+			"localhost:6579",
+			"localhost:6679",
+		},
 	})
-	// ok, err := c.Set(context.Background(), "x", "xx", 10*time.Second).Result()
-	// fmt.Println(ok, err)
-	// x, err := c.Command(context.Background()).Result()
-	x, err := c.Get(context.Background(), "x").Result()
-	// buf, _ := json.Marshal(res)
-	fmt.Println(x, err)
+
+	for i := 0; i < 1000; i++ {
+		ok, err := c.Set(context.Background(), "x1", "xx", 10*time.Second).Result()
+		fmt.Println(time.Now(), ok, err)
+		// x, err := c.Command(context.Background()).Result()
+		x, err := c.Get(context.Background(), "x1").Result()
+		// buf, _ := json.Marshal(res)
+		fmt.Println(time.Now(), x, err)
+		time.Sleep(1 * time.Second)
+	}
 
 }

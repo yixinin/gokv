@@ -250,6 +250,10 @@ func (s *Server) StartCommit(ctx context.Context) (func(cmds ...*Commit) (resMsg
 	return commit, nil
 }
 
+func (s *Server) getLeader() *ClusterNode {
+	return s.cfg.FindClusterNode(s.leader)
+}
+
 func (s *Server) process(ctx context.Context, cmds []*Commit) (resMsg, errMsg string) {
 	data, err := json.Marshal(cmds)
 	if err != nil {
