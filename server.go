@@ -1,303 +1,307 @@
-// Copyright 2018 The tiglabs raft Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.package wal
-
 package gokv
 
 import (
+	"bufio"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
+	"net"
 	"os"
-	"path"
+	"runtime/debug"
+	"strings"
 	"time"
 
-	"github.com/tiglabs/raft"
-	"github.com/tiglabs/raft/proto"
-	"github.com/tiglabs/raft/storage/wal"
 	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
-	"github.com/yixinin/gokv/kvstore"
+	"github.com/yixinin/gokv/logger"
+	"github.com/yixinin/gokv/redis/protocol"
 )
 
-// DefaultClusterID the default cluster id, we have only one raft cluster
-const DefaultClusterID = 1
+const (
+	SetOK = "OK"
+)
 
-// DefaultRequestTimeout default request timeout
-const DefaultRequestTimeout = time.Second * 3
+type Message struct {
+	Addr net.Addr
+	args []interface{}
+}
 
-// Server the kv server
 type Server struct {
-	cfg    *Config
-	nodeID uint64       // self node id
-	node   *ClusterNode // self node
-	leader uint64
-
-	hs *http.Server
-	rs *raft.RaftServer
-
-	*_baseImpl
-	*_netImpl
-	*_numImpl
-	*_ttlImpl
-	db kvstore.Kvstore // we use leveldb to store key-value data
+	lis       net.Listener
+	clients   map[string]*Client
+	clientCmd chan Message
+	kv        *RaftKv
 }
 
-// NewServer create kvs
-func NewServer(nodeID uint64, cfg *Config) *Server {
-	s := &Server{
-		nodeID: nodeID,
-		cfg:    cfg,
-	}
-	node := cfg.FindClusterNode(nodeID)
-	if node == nil {
-		log.Panic("could not find self node(%v) in cluster config: \n(%v)", nodeID, cfg.String())
-	}
-	s.node = node
-	return s
+type Client struct {
+	conn net.Conn
+	rd   *protocol.Reader
+	bw   *bufio.Writer
+	wr   *protocol.Writer
 }
 
-// Run run server
-func (s *Server) Run(ctx context.Context) {
-	// init store
-	s.initLeveldb(ctx)
-	// start raft
-	s.startRaft(ctx)
-	// start tcp server
-	s.initTcp(ctx)
-}
-
-func (s *Server) initTcp(ctx context.Context) {
-	node := s.cfg.FindClusterNode(s.nodeID)
-	s._netImpl.listen(ctx, uint16(node.HTTPPort))
-}
-
-// Stop stop server
-func (s *Server) Stop(ctx context.Context) {
-	// stop http server
-	if s.hs != nil {
-		if err := s.hs.Shutdown(nil); err != nil {
-			log.Error("shutdown http failed: %v", err)
-		}
-	}
-
-	// stop raft server
-	if s.rs != nil {
-		s.rs.Stop()
-	}
-
-	// close leveldb
-	if s.db != nil {
-		if err := s.db.Close(ctx); err != nil {
-			log.Error("close leveldb failed: %v", err)
-		}
+func NewServer(kv *RaftKv) *Server {
+	return &Server{
+		clients:   make(map[string]*Client),
+		clientCmd: make(chan Message),
+		kv:        kv,
 	}
 }
 
-func (s *Server) initLeveldb(ctx context.Context) {
-	if s.cfg.ServerCfg.DataPath == "memdb" {
-		s.db = kvstore.NewMemDB()
-		return
+func (n *Server) Close(ctx context.Context) {
+	if n.lis != nil {
+		n.lis.Close()
 	}
-	dbPath := path.Join(s.cfg.ServerCfg.DataPath, "db")
-	db, err := kvstore.NewLevelDB(dbPath)
+}
+
+func (n *Server) Run(ctx context.Context, port uint32) error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Panic("init leveldb failed: %v, path: %v", err, dbPath)
+		return err
 	}
-	s.db = db
-	s._netImpl = NewNetImpl(s)
-	s._baseImpl = NewBaseImpl(s.db)
-	s._numImpl = NewNumImpl(s.db)
-	s._ttlImpl = NewTTLImpl(s.db)
+	logger.Info(ctx, "listen on ", port)
+	n.lis = lis
 
-	log.Info("init leveldb sucessfully. path: %v", dbPath)
-}
+	go n.receive(ctx)
 
-func (s *Server) startRaft(ctx context.Context) {
-	// logger.SetLogger(log.GetFileLogger())
-
-	// start raft server
-	sc := raft.DefaultConfig()
-	sc.NodeID = s.nodeID
-	sc.Resolver = newClusterResolver(s.cfg)
-	sc.TickInterval = time.Millisecond * 500
-	sc.ReplicateAddr = fmt.Sprintf(":%d", s.node.ReplicatePort)
-	sc.HeartbeatAddr = fmt.Sprintf(":%d", s.node.HeartbeatPort)
-	rs, err := raft.NewRaftServer(sc)
-	if err != nil {
-		log.Panic("start raft server failed: %v", err)
-	}
-	s.rs = rs
-	log.Info("raft server started.")
-
-	// create raft
-	walPath := path.Join(s.cfg.ServerCfg.DataPath, "wal")
-	raftStore, err := wal.NewStorage(walPath, &wal.Config{})
-	if err != nil {
-		log.Panic("init raft log storage failed: %v", err)
-	}
-	rc := &raft.RaftConfig{
-		ID:           DefaultClusterID,
-		Storage:      raftStore,
-		StateMachine: s,
-	}
-	for _, n := range s.cfg.ClusterCfg.Nodes {
-		rc.Peers = append(rc.Peers, proto.Peer{
-			Type:   proto.PeerNormal,
-			ID:     n.NodeID,
-			PeerID: n.NodeID,
-		})
-	}
-	err = s.rs.CreateRaft(rc)
-	if err != nil {
-		log.Panic("create raft failed: %v", err)
-	}
-	log.Info("raft created.")
-}
-
-// Apply implement raft StateMachine Apply method
-func (s *Server) Apply(command []byte, index uint64) (interface{}, error) {
-	var cmds []Commit
-	err := json.Unmarshal(command, &cmds)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal command failed: %v", command)
-	}
-
-	var ctx = context.Background()
-	for _, cmd := range cmds {
-		switch cmd.OP {
-		case CommitOPSet:
-			go func(ctx context.Context) {
-				v := codec.Decode(cmd.Value)
-				val := v.String()
-				ex := v.ExpireAt()
-				if ex > 0 {
-					log.Debug("apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Kitchen), cmd.Value)
-				} else {
-					log.Debug("apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
-				}
-
-			}(ctx)
-
-			err := s.db.Set(ctx, cmd.Key, cmd.Value)
-			if err != nil {
-				return nil, err
-			}
-			return "OK", nil
-		case CommitOPDel:
-			log.Debug("apply del command at index(%v) -> %s", index, cmd.Key)
-			err := s.db.Delete(ctx, cmd.Key)
-			if err != nil {
-				return "", err
-			}
-			return "OK", nil
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
 		default:
-			return nil, fmt.Errorf("invalid cmd type: %v", cmd.OP)
+			conn, err := lis.Accept()
+			if err != nil {
+				return err
+			}
+			go n.readAsync(ctx, conn)
 		}
 	}
-	return nil, nil
 }
 
-// ApplyMemberChange implement raft.StateMachine
-func (s *Server) ApplyMemberChange(confChange *proto.ConfChange, index uint64) (interface{}, error) {
-	return nil, errors.New("not supported")
-}
-
-// Snapshot implement raft.StateMachine
-func (s *Server) Snapshot() (proto.Snapshot, error) {
-	// return s.db.GetSnapshot(context.Background())
-	return nil, errors.New("not supported")
-}
-
-// ApplySnapshot implement raft.StateMachine
-func (s *Server) ApplySnapshot(peers []proto.Peer, iter proto.SnapIterator) error {
-	// s.db.RecoverFromSnapshot(context)
-	return errors.New("not supported")
-}
-
-// HandleFatalEvent implement raft.StateMachine
-func (s *Server) HandleFatalEvent(err *raft.FatalError) {
-	log.Panic("raft fatal error: %v", err)
-}
-
-// HandleLeaderChange implement raft.StateMachine
-func (s *Server) HandleLeaderChange(leader uint64) {
-	log.Info("raft leader change to %v", leader)
-	s.leader = leader
-}
-
-func (s *Server) StartCommit(ctx context.Context) (func(cmds ...*Commit) (resMsg, errMsg string), *ClusterNode) {
-	var commit = func(cmds ...*Commit) (resMsg, errMsg string) {
-		return s.process(ctx, cmds)
-	}
-	if s.leader != s.nodeID {
-		// s.replyNotLeader(w)
-		node := s.cfg.FindClusterNode(s.leader)
-		return commit, node
-	}
-	return commit, nil
-}
-
-func (s *Server) getLeader() *ClusterNode {
-	return s.cfg.FindClusterNode(s.leader)
-}
-
-func (s *Server) process(ctx context.Context, cmds []*Commit) (resMsg, errMsg string) {
-	data, err := json.Marshal(cmds)
-	if err != nil {
-		log.Error("marshal raft command failed: %v", err)
-		errMsg = err.Error()
-		return
-	}
-
-	f := s.rs.Submit(DefaultClusterID, data)
-	respCh, errCh := f.AsyncResponse()
-	select {
-	case resp := <-respCh:
-		if msg, ok := resp.(string); ok {
-			return msg, ""
+func (n *Server) readAsync(ctx context.Context, conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("tcpReceive recovered from panic:%v, stacks:%s", r, debug.Stack())
 		}
-		resMsg = fmt.Sprint(resp)
-		return
-	case err := <-errCh:
-		errMsg = err.Error()
-		return
-	case <-time.After(DefaultRequestTimeout):
-		errMsg = "commit timeout"
-		return
-	}
-}
-
-func (s *Server) getByReadIndex(ctx context.Context, key string) ([]byte, error) {
-	// if log.GetFileLogger().IsEnableDebug() {
-	// 	log.Debug("get %s by ReadIndex", key)
+	}()
+	// err := conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	// if err != nil {
+	// 	logger.Error(ctx, err)
+	// 	return
 	// }
-
-	f := s.rs.ReadIndex(DefaultClusterID)
-	respCh, errCh := f.AsyncResponse()
-	select {
-	case resp := <-respCh:
-		if resp != nil {
-			return nil, fmt.Errorf("process get %s failed: unexpected resp type: %T", key, resp)
-		}
-		value, err := s.db.Get(ctx, []byte(key))
-		return value, err
-
-	case err := <-errCh:
-		return nil, err
-	case <-time.After(DefaultRequestTimeout):
-		return nil, os.ErrDeadlineExceeded
+	c := &Client{
+		conn: conn,
+		rd:   protocol.NewReader(conn),
+		bw:   bufio.NewWriter(conn),
 	}
+	c.wr = protocol.NewWriter(c.bw)
+
+	n.clients[conn.RemoteAddr().String()] = c
+	defer c.conn.Close()
+	defer delete(n.clients, conn.RemoteAddr().String())
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			c.wr.WriteClose()
+			return
+		default:
+			err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
+			if err != nil {
+				log.Error("set client conn timeout error:%v, this conn will disconnect", err)
+				return
+			}
+			cmd, err := c.rd.ReadRequest(protocol.SliceParser)
+			if os.IsTimeout(err) {
+				continue loop
+			}
+
+			if err != nil {
+				log.Error("receive redis cmd error:%v, this conn will disconnect", err)
+				return
+			}
+			switch cmd := cmd.(type) {
+			case []interface{}:
+				n.clientCmd <- Message{
+					Addr: conn.RemoteAddr(),
+					args: cmd,
+				}
+			case []byte, string, interface{}:
+				n.clientCmd <- Message{
+					Addr: conn.RemoteAddr(),
+					args: []interface{}{cmd},
+				}
+			default:
+				logger.Info(ctx, "wrong cmd", cmd)
+			}
+		}
+	}
+}
+
+func (n *Server) receive(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case cmd := <-n.clientCmd:
+			go n.handleCmd(context.Background(), cmd.Addr, cmd.args)
+		}
+	}
+}
+
+func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{}) error {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("handleCmd recovered from panic:%v, stacks:%s", r, debug.Stack())
+		}
+	}()
+	client, ok := n.clients[addr.String()]
+	if !ok {
+		logger.Info(ctx, "client disconnected", addr.String())
+		return nil
+	}
+	if len(args) == 0 {
+		return client.wr.WriteWrongArgs(args)
+	}
+	var formatedArgs = make([]string, 0, len(args))
+	for i := range args {
+		switch arg := args[i].(type) {
+		case []byte:
+			formatedArgs = append(formatedArgs, string(arg))
+		default:
+			formatedArgs = append(formatedArgs, fmt.Sprint(arg))
+		}
+	}
+	log.Debug("cmd %v", formatedArgs)
+	cmd, ok := args[0].([]byte)
+	if !ok {
+		return client.wr.WriteWrongArgs(args)
+	}
+	defer client.bw.Flush()
+	switch strings.ToLower(codec.BytesToString(cmd)) {
+	case "set":
+		commit, leader := n.kv.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewSetCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.Set(ctx, cmd)
+		cmd.OK, cmd.Err = commit(ct)
+		return cmd.Write(client.wr)
+	case "get":
+		commit, leader := n.kv.StartCommit(ctx)
+		cmd, ok := protocol.NewGetCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.Get(ctx, cmd)
+		if ct != nil && leader == nil {
+			go commit(ct)
+		}
+		cmd.Write(client.wr)
+	case "del":
+		commit, leader := n.kv.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		keyCmd, ok := protocol.NewDelCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.Delete(ctx, keyCmd.BaseCmd)
+		if ct != nil {
+			keyCmd.OK, keyCmd.Err = commit(ct)
+		}
+
+		return keyCmd.Write(client.wr)
+	case "ttl":
+		commit, leader := n.kv.StartCommit(ctx)
+		cmd, ok := protocol.NewTTLCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.TTL(ctx, cmd)
+		if commit != nil && leader == nil {
+			go commit(ct)
+		}
+		return cmd.Write(client.wr)
+	case "expire":
+		commit, leader := n.kv.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewExpirecmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.ExpireAt(ctx, cmd)
+		if ct != nil {
+			cmd.OK, cmd.Err = commit(ct)
+		}
+		return cmd.Write(client.wr)
+	case "hset":
+	case "hget":
+	case "hgetall":
+	case "incrby":
+		commit, leader := n.kv.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewIncrByCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.Incr(ctx, cmd)
+		if ct != nil {
+			ok, err := commit(ct)
+			if !ok {
+				cmd.Val = 0
+			}
+			cmd.Err = err
+		}
+		cmd.Write(client.wr)
+	case "incr":
+		commit, leader := n.kv.StartCommit(ctx)
+		if leader != nil {
+			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
+		}
+		cmd, ok := protocol.NewIncrCmd(args)
+		if !ok {
+			return client.wr.WriteWrongArgs(args)
+		}
+		ct := n.kv.Incr(ctx, cmd)
+		if ct != nil {
+			ok, err := commit(ct)
+			if !ok {
+				cmd.Val = 0
+			}
+			cmd.Err = err
+		}
+		return cmd.Write(client.wr)
+	case "command":
+		log.Debug("commands none")
+		return protocol.NewCommandsInfoCmd().Write(client.wr)
+	case "ping":
+		return client.wr.Pong()
+	case "sentinel":
+		cmd := protocol.NewSentinelCmd(args)
+		leader := n.kv.getLeader()
+		if leader != nil {
+			cmd.MasterAddr[0] = leader.Host
+			cmd.MasterAddr[1] = fmt.Sprint(leader.HTTPPort)
+		}
+		for _, node := range n.kv.cfg.ClusterCfg.Nodes {
+			if node == leader {
+				continue
+			}
+			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"ip", node.Host})
+			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"port", fmt.Sprint(node.HTTPPort)})
+		}
+		return cmd.Write(client.wr)
+	default:
+		return client.wr.WriteWrongArgs(args)
+	}
+	return nil
 }

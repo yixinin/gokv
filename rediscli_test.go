@@ -26,6 +26,10 @@ func TestRedisCli(t *testing.T) {
 		x, err := c.Get(context.Background(), "x1").Result()
 		// buf, _ := json.Marshal(res)
 		fmt.Println(time.Now(), x, err)
+		i, err := c.Incr(context.Background(), "x2").Result()
+		fmt.Println(i, err)
+		ttl, err := c.TTL(context.Background(), "x3").Result()
+		fmt.Println(ttl, err)
 		time.Sleep(1 * time.Second)
 	}
 

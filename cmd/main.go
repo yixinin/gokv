@@ -32,15 +32,19 @@ func main() {
 	// load config
 	cfg := gokv.LoadConfig(*confFile, *nodeID)
 
-	ch := make(chan os.Signal)
+	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt)
 	// init log
 	// log.InitFileLog(cfg.ServerCfg.LogPath, fmt.Sprintf("node%d", *nodeID), cfg.ServerCfg.LogLevel)
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
-	// start server
-	server := gokv.NewServer(*nodeID, cfg)
-	go server.Run(ctx)
+	// start kv
+	kv := gokv.NewRaftKv(*nodeID, cfg)
+	go kv.Run(ctx)
+	server := gokv.NewServer(kv)
+	go server.Run(ctx, cfg.FindClusterNode(*nodeID).HTTPPort)
+
 	<-ch
+	kv.Stop(ctx)
 	cancel()
 }

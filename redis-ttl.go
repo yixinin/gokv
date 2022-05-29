@@ -25,16 +25,16 @@ func NewTTLImpl(kv kvstore.Kvstore) *_ttlImpl {
 func (t *_ttlImpl) ExpireAt(ctx context.Context, ex *protocol.ExpireCmd) *Commit {
 	data, err := t.kv.Get(ctx, ex.Key)
 	if err != nil {
-		ex.Message = err.Error()
+		ex.Err = err
 		return nil
 	}
 	v := codec.Decode(data)
 	if v.Expired(ex.Now) {
-		ex.Message = kverror.ErrNotFound.Error()
+		ex.Err = kverror.ErrNotFound
 		return nil
 	}
 	if ex.EX > 0 && ex.Now >= ex.EX {
-		ex.Message = kverror.ErrNotFound.Error()
+		ex.Err = kverror.ErrNotFound
 		return NewDelCommit(ex.Key)
 	}
 
@@ -46,7 +46,11 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, ex *protocol.ExpireCmd) *Commit
 func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
 	data, err := t.kv.Get(ctx, ttl.Key)
 	if err != nil {
-		ttl.Message = err.Error()
+		if err == kverror.ErrNotFound {
+			ttl.TTL = -2
+			return nil
+		}
+		ttl.Err = err
 		return nil
 	}
 	v := codec.Decode(data)
@@ -63,7 +67,7 @@ func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
 	return nil
 }
 
-func (t *Server) GC(ctx context.Context) {
+func (t *RaftKv) GC(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println(r, string(debug.Stack()))

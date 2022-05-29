@@ -22,7 +22,7 @@ func NewNumImpl(kv kvstore.Kvstore) *_numImpl {
 func (n *_numImpl) Incr(ctx context.Context, cmd *protocol.IncrByCmd) *Commit {
 	data, err := n.kv.Get(ctx, cmd.Key)
 	if err != nil && err != kverror.ErrNotFound {
-		cmd.Message = err.Error()
+		cmd.Err = err
 		return nil
 	}
 	oldV := codec.Decode(data)
