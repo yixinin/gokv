@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
 )
@@ -54,17 +55,10 @@ func (w *Writer) writeArray(msg ...string) error {
 	w.WriteByte(ArrayReply)
 	w.writeLen(len(msg))
 	for i := range msg {
-		w.WriteByte(StringReply)
-		w.writeLen(len(msg[i]))
-		w.WriteString(msg[i])
-		w.crlf()
+		w.bytes(StringReply, codec.StringToBytes(msg[i]))
 	}
 
 	return nil
-}
-
-func (w *Writer) Pong() error {
-	return w.bytes(StatusReply, PONG)
 }
 
 func (w *Writer) WriteWrongArgs(args []interface{}) error {
@@ -82,6 +76,7 @@ func (w *Writer) WriteClose() error {
 }
 
 func (w *Writer) bytes(t byte, b []byte) error {
+	log.Debug(string(b))
 	if err := w.WriteByte(t); err != nil {
 		return err
 	}

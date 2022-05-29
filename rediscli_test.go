@@ -30,6 +30,10 @@ func TestRedisCli(t *testing.T) {
 		fmt.Println(i, err)
 		ttl, err := c.TTL(context.Background(), "x3").Result()
 		fmt.Println(ttl, err)
+		ttl, err = c.TTL(context.Background(), "x2").Result()
+		fmt.Println(ttl, err)
+		ttl, err = c.TTL(context.Background(), "x1").Result()
+		fmt.Println(ttl, err)
 		time.Sleep(1 * time.Second)
 	}
 

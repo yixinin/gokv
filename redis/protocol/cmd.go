@@ -1,9 +1,13 @@
 package protocol
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 )
 
 var (
@@ -19,8 +23,11 @@ type Responser interface {
 }
 
 type BaseCmd struct {
-	Now uint64
-	Key []byte
+	Now     uint64
+	Command string
+	Key     []byte
+	args    [][]byte
+	*ErrResp
 }
 
 type ErrResp struct {
@@ -31,39 +38,62 @@ func (c *ErrResp) Write(w *Writer) error {
 	if c.Err != nil {
 		return w.writeError(c.Err)
 	}
-	return nil
+	return w.bytes(ErrorReply, NIL)
 }
 
 type OkResp struct {
-	*ErrResp
 	OK bool
-}
-
-func NewOkResp() *OkResp {
-	return &OkResp{
-		ErrResp: &ErrResp{},
-	}
 }
 
 func (r *OkResp) Write(w *Writer) error {
 	if r.OK {
 		return w.bytes(StatusReply, OK)
 	}
-	if r.Err != nil {
-		return r.ErrResp.Write(w)
-	}
 	return w.bytes(ErrorReply, []byte("Fail"))
 }
 
-func NewBaseCmd(args []interface{}) (*BaseCmd, bool) {
-	var cmd = &BaseCmd{
-		Now: uint64(time.Now().Unix()),
+func Command(args []interface{}) *BaseCmd {
+	var base = &BaseCmd{
+		Now:     uint64(time.Now().Unix()),
+		ErrResp: &ErrResp{},
+		args:    make([][]byte, 1, len(args)),
 	}
-	if len(args) < 2 {
-		return cmd, false
+	var debugStr = make([]string, 0, len(args))
+	for _, v := range args {
+		debugStr = append(debugStr, codec.BytesToString(v.([]byte)))
 	}
-	cmd.Key, _ = args[1].([]byte)
-	return cmd, true
+	log.Debug("cmd %v", strings.Join(debugStr, " "))
+	size := len(args)
+	if size == 0 {
+		base.Err = kverror.ErrCommandArgs
+		return base
+	}
+	var ok bool
+	base.args[0], ok = args[0].([]byte)
+	if !ok {
+		base.Err = kverror.ErrCommandArgs
+		return base
+	}
+	base.Command = codec.BytesToString(base.args[0])
+	for i := 1; i < size; i++ {
+		switch arg := args[i].(type) {
+		case []byte:
+			base.args = append(base.args, arg)
+		case int64:
+			base.args = append(base.args, codec.StringToBytes(strconv.FormatInt(arg, 10)))
+		case string:
+			base.args = append(base.args, codec.StringToBytes(arg))
+		default:
+			base.Err = kverror.ErrCommandArgs
+			return base
+		}
+	}
+
+	if size >= 2 {
+		base.Key = base.args[1]
+	}
+
+	return base
 }
 
 type SetCmd struct {
@@ -75,28 +105,26 @@ type SetCmd struct {
 	NX  bool
 }
 
-func NewSetCmd(args []interface{}) (*SetCmd, bool) {
-	var size = len(args)
+func NewSetCmd(base *BaseCmd) *SetCmd {
+	var size = len(base.args)
 	var cmd = &SetCmd{
-		OkResp: NewOkResp(),
+		BaseCmd: base,
+		OkResp:  &OkResp{},
 	}
 	if size < 3 {
-		return cmd, false
+		cmd.Err = kverror.ErrCommandArgs
+		return cmd
 	}
-	c, ok := NewBaseCmd(args)
-	cmd.BaseCmd = c
-	cmd.Val, _ = args[2].([]byte)
+
+	cmd.Val = base.args[2]
 	for i := 3; i < size; i++ {
-		arg, ok := args[i].([]byte)
-		if !ok {
-			continue
-		}
+		arg := base.args[i]
 		switch codec.BytesToString(arg) {
 		case EX:
 			if size >= i+2 {
-				ex, _ := codec.StringBytes2Int64(args[i+1].([]byte))
+				ex, _ := codec.StringBytes2Int64(base.args[i+1])
 				if ex > 0 {
-					cmd.EX = uint64(ex) + c.Now
+					cmd.EX = uint64(ex) + base.Now
 				}
 				i++
 			}
@@ -104,23 +132,20 @@ func NewSetCmd(args []interface{}) (*SetCmd, bool) {
 			cmd.NX = true
 		}
 	}
-	return cmd, ok
+	return cmd
 }
 
 type GetCmd struct {
 	*BaseCmd
-	*ErrResp
 
 	Val []byte
 }
 
-func NewGetCmd(args []interface{}) (*GetCmd, bool) {
-	c, ok := NewBaseCmd(args)
+func NewGetCmd(base *BaseCmd) *GetCmd {
 	cmd := &GetCmd{
-		BaseCmd: c,
-		ErrResp: &ErrResp{},
+		BaseCmd: base,
 	}
-	return cmd, ok
+	return cmd
 }
 
 func (c *GetCmd) Write(w *Writer) error {
@@ -135,13 +160,12 @@ type DelCmd struct {
 	*OkResp
 }
 
-func NewDelCmd(args []interface{}) (*DelCmd, bool) {
-	c, ok := NewBaseCmd(args)
+func NewDelCmd(base *BaseCmd) *DelCmd {
 	cmd := &DelCmd{
-		BaseCmd: c,
-		OkResp:  NewOkResp(),
+		BaseCmd: base,
+		OkResp:  &OkResp{},
 	}
-	return cmd, ok
+	return cmd
 }
 
 type ExpireCmd struct {
@@ -150,47 +174,34 @@ type ExpireCmd struct {
 	EX uint64
 }
 
-func NewExpirecmd(args []interface{}) (*ExpireCmd, bool) {
+func NewExpirecmd(base *BaseCmd) *ExpireCmd {
 	var cmd = &ExpireCmd{
-		OkResp: NewOkResp(),
+		BaseCmd: base,
+		OkResp:  &OkResp{},
 	}
-	if len(args) < 3 {
-		return cmd, false
+	if len(base.args) < 3 {
+		cmd.Err = kverror.ErrCommandArgs
+		return cmd
 	}
-	c, ok := NewBaseCmd(args)
-	if !ok {
-		return cmd, false
+	ex, _ := codec.StringBytes2Int64(base.args[2])
+	if ex > 0 {
+		cmd.EX = uint64(ex) + base.Now
+		return cmd
 	}
-	cmd.BaseCmd = c
-	switch arg := args[2].(type) {
-	case int64:
-		if arg > 0 {
-			cmd.EX = uint64(arg) + c.Now
-			return cmd, true
-		}
-	case []byte:
-		ex, _ := codec.StringBytes2Int64(arg)
-		if ex > 0 {
-			cmd.EX = uint64(ex) + c.Now
-			return cmd, true
-		}
-	}
-	return cmd, false
+
+	return cmd
 }
 
 type TTLCmd struct {
 	*BaseCmd
-	*ErrResp
 	TTL int64
 }
 
-func NewTTLCmd(args []interface{}) (*TTLCmd, bool) {
-	c, ok := NewBaseCmd(args)
+func NewTTLCmd(base *BaseCmd) *TTLCmd {
 	cmd := &TTLCmd{
-		BaseCmd: c,
-		ErrResp: &ErrResp{},
+		BaseCmd: base,
 	}
-	return cmd, ok
+	return cmd
 }
 
 func (c *TTLCmd) Write(w *Writer) error {
@@ -202,52 +213,32 @@ func (c *TTLCmd) Write(w *Writer) error {
 
 type IncrByCmd struct {
 	*BaseCmd
-	*ErrResp
 	Val int64
 }
 
-func NewIncrCmd(args []interface{}) (*IncrByCmd, bool) {
+func NewIncrCmd(base *BaseCmd) *IncrByCmd {
 	var cmd = &IncrByCmd{
 		Val:     1,
-		ErrResp: &ErrResp{},
+		BaseCmd: base,
 	}
-	if len(args) < 2 {
-		return cmd, false
-	}
-	c, ok := NewBaseCmd(args)
-	if !ok {
-		return cmd, false
-	}
-	cmd.BaseCmd = c
-	return cmd, ok
+	return cmd
 }
 
-func NewIncrByCmd(args []interface{}) (*IncrByCmd, bool) {
+func NewIncrByCmd(base *BaseCmd) *IncrByCmd {
 	var cmd = &IncrByCmd{
-		ErrResp: &ErrResp{},
+		BaseCmd: base,
 	}
-	if len(args) < 3 {
-		return cmd, false
+	if len(base.args) < 3 {
+		cmd.Err = kverror.ErrCommandArgs
+		return cmd
 	}
-	c, ok := NewBaseCmd(args)
-	if !ok {
-		return cmd, false
+
+	val, _ := codec.StringBytes2Int64(base.args[2])
+	if val != 0 {
+		cmd.Val = val
+		return cmd
 	}
-	cmd.BaseCmd = c
-	switch arg := args[2].(type) {
-	case int64:
-		if arg != 0 {
-			cmd.Val = arg
-			return cmd, true
-		}
-	case []byte:
-		val, _ := codec.StringBytes2Int64(arg)
-		if val != 0 {
-			cmd.Val = val
-			return cmd, true
-		}
-	}
-	return cmd, false
+	return cmd
 }
 
 func (c *IncrByCmd) Write(w *Writer) error {
@@ -272,7 +263,7 @@ type CommandsInfoCmd struct {
 	Val map[string]CommandInfo
 }
 
-func NewCommandsInfoCmd() *CommandsInfoCmd {
+func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 	return &CommandsInfoCmd{
 		Val: map[string]CommandInfo{
 			"get":    {},
@@ -291,8 +282,7 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 }
 
 func (c *CommandsInfoCmd) Write(w *Writer) error {
-	err := w.writeArray("no")
-	return err
+	return w.writeArray("no")
 }
 
 type SentinelCmd struct {
@@ -322,4 +312,11 @@ func (c *SentinelCmd) Write(w *Writer) error {
 		return w.writeArray(c.MasterAddr[:]...)
 	}
 	return nil
+}
+
+type PingCommand struct {
+}
+
+func (c *PingCommand) Write(w *Writer) error {
+	return w.bytes(StatusReply, PONG)
 }

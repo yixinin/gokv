@@ -8,10 +8,12 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
 )
@@ -26,6 +28,7 @@ type Message struct {
 }
 
 type Server struct {
+	sync.RWMutex
 	lis       net.Listener
 	clients   map[string]*Client
 	clientCmd chan Message
@@ -94,10 +97,15 @@ func (n *Server) readAsync(ctx context.Context, conn net.Conn) {
 		bw:   bufio.NewWriter(conn),
 	}
 	c.wr = protocol.NewWriter(c.bw)
-
+	n.Lock()
 	n.clients[conn.RemoteAddr().String()] = c
+	n.Unlock()
 	defer c.conn.Close()
-	defer delete(n.clients, conn.RemoteAddr().String())
+	defer func() {
+		n.Lock()
+		delete(n.clients, conn.RemoteAddr().String())
+		n.Unlock()
+	}()
 loop:
 	for {
 		select {
@@ -154,87 +162,85 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			log.Error("handleCmd recovered from panic:%v, stacks:%s", r, debug.Stack())
 		}
 	}()
+	n.RLock()
 	client, ok := n.clients[addr.String()]
+	n.RUnlock()
 	if !ok {
 		logger.Info(ctx, "client disconnected", addr.String())
 		return nil
 	}
-	if len(args) == 0 {
+	base := protocol.Command(args)
+	if base.Err != nil {
 		return client.wr.WriteWrongArgs(args)
 	}
-	var formatedArgs = make([]string, 0, len(args))
-	for i := range args {
-		switch arg := args[i].(type) {
-		case []byte:
-			formatedArgs = append(formatedArgs, string(arg))
-		default:
-			formatedArgs = append(formatedArgs, fmt.Sprint(arg))
-		}
-	}
-	log.Debug("cmd %v", formatedArgs)
 	cmd, ok := args[0].([]byte)
 	if !ok {
 		return client.wr.WriteWrongArgs(args)
 	}
 	defer client.bw.Flush()
+
 	switch strings.ToLower(codec.BytesToString(cmd)) {
+	case "ping":
+		cmd := &protocol.PingCommand{}
+		return cmd.Write(client.wr)
 	case "set":
-		commit, leader := n.kv.StartCommit(ctx)
-		if leader != nil {
-			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
-		}
-		cmd, ok := protocol.NewSetCmd(args)
+		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
-			return client.wr.WriteWrongArgs(args)
+			return n.replyLeader(client.wr)
+		}
+
+		cmd := protocol.NewSetCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
 		}
 		ct := n.kv.Set(ctx, cmd)
 		cmd.OK, cmd.Err = commit(ct)
 		return cmd.Write(client.wr)
 	case "get":
-		commit, leader := n.kv.StartCommit(ctx)
-		cmd, ok := protocol.NewGetCmd(args)
-		if !ok {
-			return client.wr.WriteWrongArgs(args)
+		commit, ok := n.kv.StartCommit(ctx)
+		cmd := protocol.NewGetCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
 		}
 		ct := n.kv.Get(ctx, cmd)
-		if ct != nil && leader == nil {
+		if ct != nil && ok {
 			go commit(ct)
 		}
-		cmd.Write(client.wr)
+		return cmd.Write(client.wr)
 	case "del":
-		commit, leader := n.kv.StartCommit(ctx)
-		if leader != nil {
-			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
-		}
-		keyCmd, ok := protocol.NewDelCmd(args)
+		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
-			return client.wr.WriteWrongArgs(args)
+			return n.replyLeader(client.wr)
 		}
-		ct := n.kv.Delete(ctx, keyCmd.BaseCmd)
+		cmd := protocol.NewDelCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
+		}
+		ct := n.kv.Delete(ctx, cmd.BaseCmd)
 		if ct != nil {
-			keyCmd.OK, keyCmd.Err = commit(ct)
+			cmd.OK, cmd.Err = commit(ct)
 		}
 
-		return keyCmd.Write(client.wr)
+		return cmd.Write(client.wr)
 	case "ttl":
-		commit, leader := n.kv.StartCommit(ctx)
-		cmd, ok := protocol.NewTTLCmd(args)
-		if !ok {
-			return client.wr.WriteWrongArgs(args)
+		commit, ok := n.kv.StartCommit(ctx)
+		cmd := protocol.NewTTLCmd(base)
+		if cmd.Err != nil {
+			return n.replyLeader(client.wr)
 		}
 		ct := n.kv.TTL(ctx, cmd)
-		if commit != nil && leader == nil {
+		if commit != nil && ok {
 			go commit(ct)
 		}
 		return cmd.Write(client.wr)
 	case "expire":
-		commit, leader := n.kv.StartCommit(ctx)
-		if leader != nil {
-			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
-		}
-		cmd, ok := protocol.NewExpirecmd(args)
+		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
-			return client.wr.WriteWrongArgs(args)
+			return n.replyLeader(client.wr)
+		}
+		cmd := protocol.NewExpirecmd(base)
+		if cmd.Err != nil {
+			cmd.Write(client.wr)
 		}
 		ct := n.kv.ExpireAt(ctx, cmd)
 		if ct != nil {
@@ -242,16 +248,19 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "hset":
+		fallthrough
 	case "hget":
+		fallthrough
 	case "hgetall":
+		fallthrough
 	case "incrby":
-		commit, leader := n.kv.StartCommit(ctx)
-		if leader != nil {
-			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
-		}
-		cmd, ok := protocol.NewIncrByCmd(args)
+		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
-			return client.wr.WriteWrongArgs(args)
+			return n.replyLeader(client.wr)
+		}
+		cmd := protocol.NewIncrByCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
@@ -261,15 +270,15 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			}
 			cmd.Err = err
 		}
-		cmd.Write(client.wr)
+		return cmd.Write(client.wr)
 	case "incr":
-		commit, leader := n.kv.StartCommit(ctx)
-		if leader != nil {
-			return client.wr.WriteNotLeader(leader.Host, leader.HTTPPort)
-		}
-		cmd, ok := protocol.NewIncrCmd(args)
+		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
-			return client.wr.WriteWrongArgs(args)
+			return n.replyLeader(client.wr)
+		}
+		cmd := protocol.NewIncrCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
@@ -281,10 +290,9 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "command":
-		log.Debug("commands none")
-		return protocol.NewCommandsInfoCmd().Write(client.wr)
-	case "ping":
-		return client.wr.Pong()
+		_, ok := n.kv.StartCommit(ctx)
+		cmd := protocol.NewCommandsInfoCmd(ok)
+		return cmd.Write(client.wr)
 	case "sentinel":
 		cmd := protocol.NewSentinelCmd(args)
 		leader := n.kv.getLeader()
@@ -301,7 +309,16 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	default:
-		return client.wr.WriteWrongArgs(args)
+		base.Err = kverror.ErrCommandNotSupport
+		return base.Write(client.wr)
+	}
+	return nil
+}
+
+func (s *Server) replyLeader(w *protocol.Writer) error {
+	var leader = s.kv.getLeader()
+	if leader != nil {
+		return w.WriteNotLeader(leader.Host, leader.HTTPPort)
 	}
 	return nil
 }

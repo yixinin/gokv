@@ -229,16 +229,14 @@ func (s *RaftKv) HandleLeaderChange(leader uint64) {
 	s.leader = leader
 }
 
-func (s *RaftKv) StartCommit(ctx context.Context) (func(cmds ...*Commit) (bool, error), *ClusterNode) {
+func (s *RaftKv) StartCommit(ctx context.Context) (func(cmds ...*Commit) (bool, error), bool) {
 	var commit = func(cmds ...*Commit) (bool, error) {
 		return s.process(ctx, cmds)
 	}
 	if s.leader != s.nodeID {
-		// s.replyNotLeader(w)
-		node := s.cfg.FindClusterNode(s.leader)
-		return commit, node
+		return commit, false
 	}
-	return commit, nil
+	return commit, true
 }
 
 func (s *RaftKv) getLeader() *ClusterNode {
