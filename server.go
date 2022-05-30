@@ -44,7 +44,7 @@ type Client struct {
 func NewServer(kv *RaftKv) *Server {
 	return &Server{
 		clients:   make(map[string]*Client),
-		clientCmd: make(chan Message, 10240),
+		clientCmd: make(chan Message, 1024),
 		kv:        kv,
 	}
 }
