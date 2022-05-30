@@ -39,14 +39,47 @@ func (e *Entry) Warningln(ctx context.Context, args ...interface{}) {
 }
 func (e *Entry) Error(ctx context.Context, args ...interface{}) {
 	var log = e.e.WithContext(ctx)
+	if _, ok := e.e.Data[logrus.ErrorKey]; !ok {
+		for _, v := range args {
+			if err, ok := v.(error); ok {
+				log = log.WithError(err)
+				break
+			}
+		}
+	}
+	if EnbaleErrorLogger {
+		err.WithFields(log.Data).Error(args...)
+	}
 	log.Error(args...)
 }
 func (e *Entry) Errorf(ctx context.Context, format string, args ...interface{}) {
 	var log = e.e.WithContext(ctx)
+	if _, ok := e.e.Data[logrus.ErrorKey]; !ok {
+		for _, v := range args {
+			if err, ok := v.(error); ok {
+				log = log.WithError(err)
+				break
+			}
+		}
+	}
+	if EnbaleErrorLogger {
+		err.WithFields(log.Data).Errorf(format, args...)
+	}
 	log.Errorf(format, args...)
 }
 func (e *Entry) Errorln(ctx context.Context, args ...interface{}) {
 	var log = e.e.WithContext(ctx)
+	if _, ok := e.e.Data[logrus.ErrorKey]; !ok {
+		for _, v := range args {
+			if err, ok := v.(error); ok {
+				log = log.WithError(err)
+				break
+			}
+		}
+	}
+	if EnbaleErrorLogger {
+		err.WithFields(log.Data).Errorln(args...)
+	}
 	log.Errorln(args...)
 }
 func (e *Entry) WithField(k string, v interface{}) *Entry {

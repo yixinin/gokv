@@ -2,13 +2,13 @@ package gokv
 
 import (
 	"context"
-	"log"
 	"runtime/debug"
 	"time"
 
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
+	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
 )
 
@@ -72,7 +72,7 @@ func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
 func (t *RaftKv) GC(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println(r, string(debug.Stack()))
+			logger.Errorf(ctx, "ttl gc recovered %v, stacks:%s", r, debug.Stack())
 		}
 	}()
 

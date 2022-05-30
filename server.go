@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
+	"github.com/yixinin/gokv/trace"
 )
 
 const (
@@ -83,7 +83,7 @@ func (n *Server) Run(ctx context.Context, port uint32) error {
 func (n *Server) readAsync(ctx context.Context, conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("tcpReceive recovered from panic:%v, stacks:%s", r, debug.Stack())
+			logger.Errorf(ctx, "tcpReceive recovered from panic:%v, stacks:%s", r, debug.Stack())
 		}
 	}()
 	// err := conn.SetReadDeadline(time.Now().Add(1 * time.Second))
@@ -115,7 +115,7 @@ loop:
 		default:
 			err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
 			if err != nil {
-				log.Error("set client conn timeout error:%v, this conn will disconnect", err)
+				logger.Errorf(ctx, "set client conn timeout error:%v, this conn will disconnect", err)
 				return
 			}
 			cmd, err := c.rd.ReadRequest(protocol.SliceParser)
@@ -124,7 +124,7 @@ loop:
 			}
 
 			if err != nil {
-				log.Error("receive redis cmd error:%v, this conn will disconnect", err)
+				logger.Errorf(ctx, "receive redis cmd error:%v, this conn will disconnect", err)
 				return
 			}
 			switch cmd := cmd.(type) {
@@ -151,9 +151,10 @@ func (n *Server) receive(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case cmd := <-n.clientCmd:
-			err := n.handleCmd(context.Background(), cmd.Addr, cmd.args)
+			ctx := context.WithValue(context.Background(), trace.TraceKey, trace.GenTrace())
+			err := n.handleCmd(ctx, cmd.Addr, cmd.args)
 			if err != nil {
-				log.Error("handleCmd error:%v", err)
+				logger.Errorf(ctx, "handleCmd error:%v", err)
 			}
 		}
 	}
@@ -162,7 +163,7 @@ func (n *Server) receive(ctx context.Context) {
 func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{}) error {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("handleCmd recovered from panic:%v, stacks:%s", r, debug.Stack())
+			logger.Errorf(ctx, "handleCmd recovered from panic:%v, stacks:%s", r, debug.Stack())
 		}
 	}()
 	n.RLock()
@@ -172,7 +173,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		logger.Info(ctx, "client disconnected", addr.String())
 		return nil
 	}
-	base := protocol.Command(args)
+	base := protocol.Command(ctx, args)
 	if base.Err != nil {
 		return client.wr.WriteWrongArgs(args)
 	}

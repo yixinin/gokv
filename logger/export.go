@@ -2,9 +2,42 @@ package logger
 
 import (
 	"context"
+	"io"
 
 	"github.com/sirupsen/logrus"
 )
+
+var (
+	err = logrus.New()
+)
+
+func init() {
+	err.SetFormatter(&logrus.JSONFormatter{})
+	logrus.SetFormatter(&logrus.JSONFormatter{})
+}
+
+var EnbaleErrorLogger bool
+
+func SetOutput(stdW, errW io.Writer) {
+	logrus.SetOutput(stdW)
+	if errW != nil {
+		err.SetOutput(errW)
+	}
+}
+
+func SetLevel(lvl logrus.Level) {
+	logrus.SetLevel(lvl)
+	err.SetLevel(logrus.ErrorLevel)
+}
+
+func AddHook(hook logrus.Hook) {
+	logrus.AddHook(hook)
+	err.AddHook(hook)
+}
+
+func StandardLogger() *logrus.Logger {
+	return logrus.StandardLogger()
+}
 
 func WithField(k string, v interface{}) *Entry {
 	return &Entry{
@@ -56,16 +89,42 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 
 func Error(ctx context.Context, args ...interface{}) {
 	var log = logrus.WithContext(ctx)
+	for _, v := range args {
+		if err, ok := v.(error); ok {
+			log = log.WithError(err)
+			break
+		}
+	}
+	if EnbaleErrorLogger {
+		err.WithFields(log.Data).Error(args...)
+	}
 	log.Error(args...)
 }
 
 func Errorln(ctx context.Context, args ...interface{}) {
 	var log = logrus.WithContext(ctx)
+	for _, v := range args {
+		if err, ok := v.(error); ok {
+			log = log.WithError(err)
+			break
+		}
+	}
+	if EnbaleErrorLogger {
+		err.WithFields(log.Data).Errorln(args...)
+	}
 	log.Errorln(args...)
 }
 
 func Errorf(ctx context.Context, format string, args ...interface{}) {
 	var log = logrus.WithContext(ctx)
-
-	log.Error(args...)
+	for _, v := range args {
+		if err, ok := v.(error); ok {
+			log = log.WithError(err)
+			break
+		}
+	}
+	if EnbaleErrorLogger {
+		logrus.WithFields(log.Data).Errorf(format, args...)
+	}
+	log.Errorf(format, args...)
 }

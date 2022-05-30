@@ -1,13 +1,14 @@
 package protocol
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
+	"github.com/yixinin/gokv/logger"
 )
 
 var (
@@ -49,7 +50,7 @@ func (r *OkResp) Write(w *Writer) error {
 	return w.bytes(ErrorReply, []byte("Fail"))
 }
 
-func Command(args []interface{}) *BaseCmd {
+func Command(ctx context.Context, args []interface{}) *BaseCmd {
 	var base = &BaseCmd{
 		Now:     uint64(time.Now().Unix()),
 		ErrResp: &ErrResp{},
@@ -59,7 +60,7 @@ func Command(args []interface{}) *BaseCmd {
 	for _, v := range args {
 		debugStr = append(debugStr, codec.BytesToString(v.([]byte)))
 	}
-	log.Debug("cmd %v", strings.Join(debugStr, " "))
+	logger.Debugf(ctx, "cmd %v", strings.Join(debugStr, " "))
 	size := len(args)
 	if size == 0 {
 		base.Err = kverror.ErrCommandArgs

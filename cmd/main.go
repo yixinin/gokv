@@ -19,8 +19,12 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"strings"
 
+	"github.com/sirupsen/logrus"
+	raftlog "github.com/tiglabs/raft/logger"
 	"github.com/yixinin/gokv"
+	"github.com/yixinin/gokv/logger"
 )
 
 var nodeID = flag.Uint64("node", 1, "current node id")
@@ -32,10 +36,24 @@ func main() {
 	// load config
 	cfg := gokv.LoadConfig(*confFile, *nodeID)
 
+	if strings.ToLower(cfg.ServerCfg.LogLevel) == "debug" {
+		logger.SetLevel(logrus.DebugLevel)
+	} else {
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	if cfg.ServerCfg.LogPath != "" {
+		//todo
+	}
+
+	for _, hook := range logger.Hooks() {
+		logger.AddHook(hook)
+	}
+
+	raftlog.SetLogger(logger.NewRaftLogger())
+
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt)
-	// init log
-	// log.InitFileLog(cfg.ServerCfg.LogPath, fmt.Sprintf("node%d", *nodeID), cfg.ServerCfg.LogLevel)
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 	// start kv

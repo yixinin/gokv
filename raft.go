@@ -26,9 +26,9 @@ import (
 	"github.com/tiglabs/raft"
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/storage/wal"
-	"github.com/tiglabs/raft/util/log"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
+	"github.com/yixinin/gokv/logger"
 )
 
 // DefaultClusterID the default cluster id, we have only one raft cluster
@@ -61,7 +61,7 @@ func NewRaftKv(nodeID uint64, cfg *Config) *RaftKv {
 	}
 	node := cfg.FindClusterNode(nodeID)
 	if node == nil {
-		log.Panic("could not find self node(%v) in cluster config: \n(%v)", nodeID, cfg.String())
+		logger.Errorf(context.TODO(), "could not find self node(%v) in cluster config: \n(%v)", nodeID, cfg.String())
 	}
 	s.node = node
 	return s
@@ -93,7 +93,7 @@ func (s *RaftKv) Stop(ctx context.Context) {
 	// close leveldb
 	if s.db != nil {
 		if err := s.db.Close(ctx); err != nil {
-			log.Error("close leveldb failed: %v", err)
+			logger.Errorf(ctx, "close leveldb failed: %v", err)
 		}
 	}
 }
@@ -106,19 +106,18 @@ func (s *RaftKv) initLeveldb(ctx context.Context) {
 	dbPath := path.Join(s.cfg.ServerCfg.DataPath, "db")
 	db, err := kvstore.NewLevelDB(dbPath)
 	if err != nil {
-		log.Panic("init leveldb failed: %v, path: %v", err, dbPath)
+		logger.Errorf(ctx, "init leveldb failed: %v, path: %v", err, dbPath)
+		panic(err)
 	}
 	s.db = db
 	s._baseImpl = NewBaseImpl(s.db)
 	s._numImpl = NewNumImpl(s.db)
 	s._ttlImpl = NewTTLImpl(s.db)
 	go s.GC(ctx)
-	log.Info("init leveldb sucessfully. path: %v", dbPath)
+	logger.Infof(ctx, "init leveldb sucessfully. path: %v", dbPath)
 }
 
 func (s *RaftKv) startRaft(ctx context.Context) {
-	// logger.SetLogger(log.GetFileLogger())
-
 	// start raft server
 	sc := raft.DefaultConfig()
 	sc.NodeID = s.nodeID
@@ -129,16 +128,18 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 	rs, err := raft.NewRaftServer(sc)
 
 	if err != nil {
-		log.Panic("start raft server failed: %v", err)
+		logger.Errorf(ctx, "start raft server failed: %v", err)
+		panic(err)
 	}
 	s.rs = rs
-	log.Info("raft server started.")
+	logger.Info(ctx, "raft server started.")
 
 	// create raft
 	walPath := path.Join(s.cfg.ServerCfg.DataPath, "wal")
 	raftStore, err := wal.NewStorage(walPath, &wal.Config{})
 	if err != nil {
-		log.Panic("init raft log storage failed: %v", err)
+		logger.Errorf(ctx, "init raft log storage failed: %v", err)
+		panic(err)
 	}
 	rc := &raft.RaftConfig{
 		ID:           DefaultClusterID,
@@ -154,9 +155,10 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 	}
 	err = s.rs.CreateRaft(rc)
 	if err != nil {
-		log.Panic("create raft failed: %v", err)
+		logger.Errorf(ctx, "create raft failed: %v", err)
+		panic(err)
 	}
-	log.Info("raft created.")
+	logger.Info(ctx, "raft created.")
 }
 
 // Apply implement raft StateMachine Apply method
@@ -179,9 +181,9 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 				val := v.String()
 				ex := v.ExpireAt()
 				if ex > 0 {
-					log.Debug("apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
+					logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
 				} else {
-					log.Debug("apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
+					logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
 				}
 
 			}(ctx)
@@ -192,7 +194,7 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 			}
 			return true, nil
 		case CommitOPDel:
-			log.Debug("apply del command at index(%v) -> %s", index, cmd.Key)
+			logger.Debugf(ctx, "apply del command at index(%v) -> %s", index, cmd.Key)
 			err := s.db.Delete(ctx, cmd.Key)
 			if err != nil {
 				return false, err
@@ -224,12 +226,13 @@ func (s *RaftKv) ApplySnapshot(peers []proto.Peer, iter proto.SnapIterator) erro
 
 // HandleFatalEvent implement raft.StateMachine
 func (s *RaftKv) HandleFatalEvent(err *raft.FatalError) {
-	log.Panic("raft fatal error: %v", err)
+	logger.Errorf(context.TODO(), "raft fatal error: %v", err)
+	panic(err)
 }
 
 // HandleLeaderChange implement raft.StateMachine
 func (s *RaftKv) HandleLeaderChange(leader uint64) {
-	log.Info("raft leader change to %v", leader)
+	logger.Infof(context.TODO(), "raft leader change to %v", leader)
 	s.leader = leader
 }
 
@@ -250,7 +253,7 @@ func (s *RaftKv) getLeader() *ClusterNode {
 func (s *RaftKv) process(ctx context.Context, cmds []*Commit) (ok bool, err error) {
 	data, err := json.Marshal(cmds)
 	if err != nil {
-		log.Error("marshal raft command failed: %v", err)
+		logger.Errorf(ctx, "marshal raft command failed: %v", err)
 		return
 	}
 
@@ -269,10 +272,6 @@ func (s *RaftKv) process(ctx context.Context, cmds []*Commit) (ok bool, err erro
 }
 
 func (s *RaftKv) getByReadIndex(ctx context.Context, key string) ([]byte, error) {
-	// if log.GetFileLogger().IsEnableDebug() {
-	// 	log.Debug("get %s by ReadIndex", key)
-	// }
-
 	f := s.rs.ReadIndex(DefaultClusterID)
 	respCh, errCh := f.AsyncResponse()
 	select {
