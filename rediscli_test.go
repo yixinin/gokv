@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/yixinin/gokv/codec"
 )
 
 func TestRedisCli(t *testing.T) {
@@ -38,5 +39,19 @@ func TestRedisCli(t *testing.T) {
 		fmt.Println(ttl, err)
 		time.Sleep(1 * time.Second)
 	}
+
+}
+
+func TestBytesAdd(t *testing.T) {
+	var x1 int64 = -1
+	var x2 int64 = -2000
+
+	b1 := codec.Int642Bytes(x1)
+	b2 := codec.Int642Bytes(x2)
+	fmt.Println(b1)
+	fmt.Println(b2)
+	sum := bytesAdd(b1, b2)
+	fmt.Println(codec.Bytes2Int64(sum))
+	fmt.Println(sum)
 
 }

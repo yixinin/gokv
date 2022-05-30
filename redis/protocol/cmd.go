@@ -240,6 +240,14 @@ func NewIncrCmd(base *BaseCmd) *IncrByCmd {
 	return cmd
 }
 
+func NewDecrCmd(base *BaseCmd) *IncrByCmd {
+	var cmd = &IncrByCmd{
+		Val:     -1,
+		BaseCmd: base,
+	}
+	return cmd
+}
+
 func NewIncrByCmd(base *BaseCmd) *IncrByCmd {
 	var cmd = &IncrByCmd{
 		BaseCmd: base,

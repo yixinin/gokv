@@ -33,6 +33,7 @@ func (n *_numImpl) Incr(ctx context.Context, cmd *protocol.IncrByCmd) *Commit {
 
 	// incr
 	sumB := bytesAdd(data[9:], codec.Int642Bytes(cmd.Val))
+
 	cmd.Val = codec.Bytes2Int64(sumB)
 	return NewSetRawCommit(cmd.Key, data)
 }
@@ -44,12 +45,13 @@ func bytesAdd(b1, b2 []byte) []byte {
 	var overflow bool
 	var b1i byte
 	for i := len(b1) - 1; i >= 0; i-- {
+		preOverflow := overflow
 		b1i = b1[i]
 		b1[i] = b1[i] + b2[i]
-		if overflow {
+		overflow = b1[i] < b1i || b1[i] < b2[i]
+		if preOverflow {
 			b1[i]++
 		}
-		overflow = b1[i] < b1i || b1[i] < b2[i]
 	}
 	return b1
 }
