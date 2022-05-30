@@ -2,8 +2,6 @@ package leveldb
 
 import (
 	"context"
-	"encoding/json"
-	"os"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -36,47 +34,6 @@ func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 	for i := 0; iter.Next() && i < limit; i++ {
 		f(iter.Key(), iter.Value())
 	}
-}
-
-func (l *ldb) GetSnapshot(ctx context.Context) ([]byte, error) {
-	ss, err := l.db.GetSnapshot()
-	defer ss.Release()
-	if err != nil {
-		return nil, err
-	}
-	var m = make(map[string][]byte, 16)
-	iter := ss.NewIterator(nil, nil)
-	for iter.Next() {
-		m[string(iter.Key())] = iter.Value()
-	}
-	return json.Marshal(m)
-}
-
-func (m *ldb) RecoverFromSnapshot(ctx context.Context, data []byte) error {
-	var datas = make(map[string][]byte)
-	err := json.Unmarshal(data, &datas)
-	if err != nil {
-		return err
-	}
-	if err := m.clearAndReopen(ctx); err != nil {
-		return err
-	}
-	for k, val := range datas {
-		m.Set(ctx, []byte(k), val)
-	}
-	return nil
-}
-
-func (m *ldb) clearAndReopen(ctx context.Context) error {
-	if err := m.db.Close(); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(m.dir); err != nil {
-		return err
-	}
-	var err error
-	m.db, err = leveldb.OpenFile(m.dir, nil)
-	return err
 }
 
 func (m *ldb) Close(ctx context.Context) error {
