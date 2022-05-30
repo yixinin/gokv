@@ -45,6 +45,6 @@ func main() {
 	go server.Run(ctx, cfg.FindClusterNode(*nodeID).HTTPPort)
 
 	<-ch
-	kv.Stop(ctx)
 	cancel()
+	kv.Stop(ctx)
 }

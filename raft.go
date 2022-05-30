@@ -112,7 +112,7 @@ func (s *RaftKv) initLeveldb(ctx context.Context) {
 	s._baseImpl = NewBaseImpl(s.db)
 	s._numImpl = NewNumImpl(s.db)
 	s._ttlImpl = NewTTLImpl(s.db)
-
+	go s.GC(ctx)
 	log.Info("init leveldb sucessfully. path: %v", dbPath)
 }
 
