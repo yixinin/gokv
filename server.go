@@ -249,10 +249,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.ExpireAt(ctx, cmd)
 		if ct != nil {
-			ok, err := commit(ct)
-			if ct.OP == CommitOPSet {
-				cmd.OK, cmd.Err = ok, err
-			}
+			cmd.OK, cmd.Err = commit(ct)
 		}
 		return cmd.Write(client.wr)
 	case "hset":

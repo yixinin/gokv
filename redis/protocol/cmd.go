@@ -190,13 +190,8 @@ func NewExpirecmd(base *BaseCmd) *ExpireCmd {
 	}
 
 	ex, _ := codec.StringBytes2Int64(base.args[2])
-	switch {
-	case ex == 0:
-		cmd.Del = true
-		cmd.OK = true
-	case ex < 0:
-		cmd.Del = true
-	case ex > 0:
+	cmd.Del = ex <= 0
+	if ex > 0 {
 		cmd.EX = uint64(ex) + base.Now
 	}
 
