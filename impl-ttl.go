@@ -97,6 +97,9 @@ loop:
 				var cts = make([]*Commit, 0, batch)
 				t.db.Scan(ctx, func(key, data []byte) {
 					if codec.Decode(data).Expired(nowUnix) {
+						if logger.EnableDebug() {
+							logger.Debugf(ctx, "gc del %s val:%v", key, data)
+						}
 						cts = append(cts, NewDelCommit(key))
 					}
 					prevKey = key

@@ -15,7 +15,6 @@ import (
 	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
-	"github.com/yixinin/gokv/trace"
 )
 
 const (
@@ -45,7 +44,7 @@ type Client struct {
 func NewServer(kv *RaftKv) *Server {
 	return &Server{
 		clients:   make(map[string]*Client),
-		clientCmd: make(chan Message, 1024),
+		clientCmd: make(chan Message, 10240),
 		kv:        kv,
 	}
 }
@@ -151,7 +150,8 @@ func (n *Server) receive(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case cmd := <-n.clientCmd:
-			ctx := context.WithValue(context.Background(), trace.TraceKey, trace.GenTrace())
+			ctx := context.Background()
+			// ctx = context.WithValue(context.Background(), trace.TraceKey, trace.GenTrace())
 			err := n.handleCmd(ctx, cmd.Addr, cmd.args)
 			if err != nil {
 				logger.Errorf(ctx, "handleCmd error:%v", err)

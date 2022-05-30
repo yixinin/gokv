@@ -180,12 +180,13 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 				v := codec.Decode(cmd.Value)
 				val := v.String()
 				ex := v.ExpireAt()
-				if ex > 0 {
-					logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
-				} else {
-					logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
+				if logger.EnableDebug() {
+					if ex > 0 {
+						logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
+					} else {
+						logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
+					}
 				}
-
 			}(ctx)
 
 			err := s.db.Set(ctx, cmd.Key, cmd.Value)
@@ -194,7 +195,9 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 			}
 			return true, nil
 		case CommitOPDel:
-			logger.Debugf(ctx, "apply del command at index(%v) -> %s", index, cmd.Key)
+			if logger.EnableDebug() {
+				logger.Debugf(ctx, "apply del command at index(%v) -> %s", index, cmd.Key)
+			}
 			err := s.db.Delete(ctx, cmd.Key)
 			if err != nil {
 				return false, err

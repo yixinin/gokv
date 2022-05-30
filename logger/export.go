@@ -8,15 +8,21 @@ import (
 )
 
 var (
-	err = logrus.New()
+	err   = logrus.New()
+	level logrus.Level
 )
 
 func init() {
 	err.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetFormatter(&logrus.JSONFormatter{})
+	level = logrus.InfoLevel
 }
 
 var EnbaleErrorLogger bool
+
+func EnableDebug() bool {
+	return level >= logrus.DebugLevel
+}
 
 func SetOutput(stdW, errW io.Writer) {
 	logrus.SetOutput(stdW)
@@ -26,6 +32,7 @@ func SetOutput(stdW, errW io.Writer) {
 }
 
 func SetLevel(lvl logrus.Level) {
+	level = lvl
 	logrus.SetLevel(lvl)
 	err.SetLevel(logrus.ErrorLevel)
 }

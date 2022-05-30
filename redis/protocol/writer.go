@@ -83,7 +83,9 @@ func (w *Writer) WriteClose() error {
 }
 
 func (w *Writer) bytes(t byte, b []byte) error {
-	logger.Debugf(context.TODO(), string(b))
+	if logger.EnableDebug() {
+		logger.Debugf(context.TODO(), string(b))
+	}
 	if err := w.WriteByte(t); err != nil {
 		return err
 	}
