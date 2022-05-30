@@ -258,7 +258,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		fallthrough
 	case "hgetall":
 		fallthrough
-	case "incrby", "decrby":
+	case "incrby":
 		commit, ok := n.kv.StartCommit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
@@ -282,6 +282,24 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			return n.replyLeader(client.wr)
 		}
 		cmd := protocol.NewIncrCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
+		}
+		ct := n.kv.Incr(ctx, cmd)
+		if ct != nil {
+			ok, err := commit(ct)
+			if !ok {
+				cmd.Val = 0
+			}
+			cmd.Err = err
+		}
+		return cmd.Write(client.wr)
+	case "decrby":
+		commit, ok := n.kv.StartCommit(ctx)
+		if !ok {
+			return n.replyLeader(client.wr)
+		}
+		cmd := protocol.NewDecrByCmd(base)
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
