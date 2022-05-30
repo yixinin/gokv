@@ -123,7 +123,7 @@ loop:
 			}
 
 			if err != nil {
-				logger.Errorf(ctx, "receive redis cmd error:%v, this conn will disconnect", err)
+				logger.Errorf(ctx, "receive redis cmd error:%v, conn:%s will be disconnect", err, conn.RemoteAddr())
 				return
 			}
 			switch cmd := cmd.(type) {
