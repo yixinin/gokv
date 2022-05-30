@@ -46,7 +46,13 @@ func (w *Writer) writeLen(n int) error {
 func (w *Writer) writeError(err error) error {
 	switch err {
 	case kverror.ErrNotFound, kverror.ErrNIL, nil:
-		return w.bytes(StringReply, NIL)
+		if err := w.WriteByte(StringReply); err != nil {
+			return err
+		}
+		if _, err := w.Write(NIL); err != nil {
+			return err
+		}
+		return w.crlf()
 	}
 	return w.bytes(ErrorReply, codec.StringToBytes(err.Error()))
 }

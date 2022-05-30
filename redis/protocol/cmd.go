@@ -175,7 +175,8 @@ func NewDelCmd(base *BaseCmd) *DelCmd {
 type ExpireCmd struct {
 	*BaseCmd
 	*OkResp
-	EX uint64
+	EX  uint64
+	Del bool
 }
 
 func NewExpirecmd(base *BaseCmd) *ExpireCmd {
@@ -187,13 +188,29 @@ func NewExpirecmd(base *BaseCmd) *ExpireCmd {
 		cmd.Err = kverror.ErrCommandArgs
 		return cmd
 	}
+
 	ex, _ := codec.StringBytes2Int64(base.args[2])
-	if ex > 0 {
+	switch {
+	case ex == 0:
+		cmd.Del = true
+		cmd.OK = true
+	case ex < 0:
+		cmd.Del = true
+	case ex > 0:
 		cmd.EX = uint64(ex) + base.Now
-		return cmd
 	}
 
 	return cmd
+}
+
+func (c *ExpireCmd) Write(w *Writer) error {
+	if c.Err != nil {
+		return c.ErrResp.Write(w)
+	}
+	if c.OK {
+		return w.int(1)
+	}
+	return w.int(0)
 }
 
 type TTLCmd struct {

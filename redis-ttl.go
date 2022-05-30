@@ -22,25 +22,27 @@ func NewTTLImpl(kv kvstore.Kvstore) *_ttlImpl {
 	}
 }
 
-func (t *_ttlImpl) ExpireAt(ctx context.Context, ex *protocol.ExpireCmd) *Commit {
-	data, err := t.kv.Get(ctx, ex.Key)
+func (t *_ttlImpl) ExpireAt(ctx context.Context, cmd *protocol.ExpireCmd) *Commit {
+	data, err := t.kv.Get(ctx, cmd.Key)
 	if err != nil {
-		ex.Err = err
+		cmd.OK = false
+		if err != kverror.ErrNotFound {
+			cmd.Err = err
+		}
 		return nil
 	}
 	v := codec.Decode(data)
-	if v.Expired(ex.Now) {
-		ex.Err = kverror.ErrNotFound
+	if v.Expired(cmd.Now) {
+		cmd.OK = false
 		return nil
 	}
-	if ex.EX > 0 && ex.Now >= ex.EX {
-		ex.Err = kverror.ErrNotFound
-		return NewDelCommit(ex.Key)
+	if cmd.Del || (cmd.EX > 0 && cmd.Now >= cmd.EX) {
+		return NewDelCommit(cmd.Key)
 	}
 
-	v.SetExpireAt(ex.EX)
+	v.SetExpireAt(cmd.EX)
 
-	return NewSetRawCommit(ex.Key, v.Raw())
+	return NewSetRawCommit(cmd.Key, v.Raw())
 }
 
 func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
