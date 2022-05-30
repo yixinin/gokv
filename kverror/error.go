@@ -10,6 +10,7 @@ var ErrNotLeaderr = errors.New("not leader")
 
 var ErrCommandArgs = errors.New("command args error")
 var ErrCommandNotSupport = errors.New("command not support")
+var ErrNotImpl = errors.New("not impl")
 
 type KvError struct {
 	Message string

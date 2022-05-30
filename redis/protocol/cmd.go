@@ -286,7 +286,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 }
 
 func (c *CommandsInfoCmd) Write(w *Writer) error {
-	return w.writeArray("no")
+	return w.writeError(kverror.ErrNotImpl)
 }
 
 type SentinelCmd struct {
