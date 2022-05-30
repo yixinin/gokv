@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/redis/protocol"
 )
@@ -22,6 +23,21 @@ func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Commit {
 	ct := s.checkExpire(ctx, cmd)
 	if ct != nil {
 		return ct
+	}
+	if cmd.NX {
+		data, err := s.kv.Get(ctx, cmd.Key)
+		if err != nil {
+			if err != kverror.ErrNotFound {
+				cmd.Err = err
+				return nil
+			}
+		} else {
+			val := codec.Decode(data)
+			if !val.Expired(cmd.Now) {
+				cmd.Err = kverror.ErrNIL
+				return nil
+			}
+		}
 	}
 	ct = NewSetCommit(cmd.Key, cmd.Val, cmd.EX)
 	return ct

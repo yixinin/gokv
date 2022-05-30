@@ -23,11 +23,11 @@ type Responser interface {
 }
 
 type BaseCmd struct {
+	*ErrResp
 	Now     uint64
 	Command string
 	Key     []byte
 	args    [][]byte
-	*ErrResp
 }
 
 type ErrResp struct {
@@ -35,10 +35,7 @@ type ErrResp struct {
 }
 
 func (c *ErrResp) Write(w *Writer) error {
-	if c.Err != nil {
-		return w.writeError(c.Err)
-	}
-	return w.bytes(ErrorReply, NIL)
+	return w.writeError(c.Err)
 }
 
 type OkResp struct {
@@ -133,6 +130,13 @@ func NewSetCmd(base *BaseCmd) *SetCmd {
 		}
 	}
 	return cmd
+}
+
+func (c *SetCmd) Write(w *Writer) error {
+	if c.Err != nil {
+		return c.ErrResp.Write(w)
+	}
+	return c.OkResp.Write(w)
 }
 
 type GetCmd struct {

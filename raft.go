@@ -127,6 +127,7 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 	sc.ReplicateAddr = fmt.Sprintf(":%d", s.node.ReplicatePort)
 	sc.HeartbeatAddr = fmt.Sprintf(":%d", s.node.HeartbeatPort)
 	rs, err := raft.NewRaftServer(sc)
+
 	if err != nil {
 		log.Panic("start raft server failed: %v", err)
 	}
@@ -160,7 +161,7 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 
 // Apply implement raft StateMachine Apply method
 func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
-	var cmds []Commit
+	var cmds []*Commit
 	err := json.Unmarshal(command, &cmds)
 	if err != nil {
 		return false, fmt.Errorf("unmarshal command failed: %v", command)
@@ -168,6 +169,9 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 
 	var ctx = context.Background()
 	for _, cmd := range cmds {
+		if cmd == nil {
+			continue
+		}
 		switch cmd.OP {
 		case CommitOPSet:
 			go func(ctx context.Context) {
@@ -175,7 +179,7 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 				val := v.String()
 				ex := v.ExpireAt()
 				if ex > 0 {
-					log.Debug("apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Kitchen), cmd.Value)
+					log.Debug("apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
 				} else {
 					log.Debug("apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
 				}

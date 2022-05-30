@@ -45,7 +45,7 @@ type Client struct {
 func NewServer(kv *RaftKv) *Server {
 	return &Server{
 		clients:   make(map[string]*Client),
-		clientCmd: make(chan Message),
+		clientCmd: make(chan Message, 1024),
 		kv:        kv,
 	}
 }
@@ -151,7 +151,10 @@ func (n *Server) receive(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case cmd := <-n.clientCmd:
-			go n.handleCmd(context.Background(), cmd.Addr, cmd.args)
+			err := n.handleCmd(context.Background(), cmd.Addr, cmd.args)
+			if err != nil {
+				log.Error("handleCmd error:%v", err)
+			}
 		}
 	}
 }
@@ -194,7 +197,9 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			return cmd.Write(client.wr)
 		}
 		ct := n.kv.Set(ctx, cmd)
-		cmd.OK, cmd.Err = commit(ct)
+		if ct != nil {
+			cmd.OK, cmd.Err = commit(ct)
+		}
 		return cmd.Write(client.wr)
 	case "get":
 		commit, ok := n.kv.StartCommit(ctx)

@@ -22,6 +22,8 @@ func TestRedisCli(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		ok, err := c.Set(context.Background(), "x1", "xx", 10*time.Second).Result()
 		fmt.Println(time.Now(), ok, err)
+		okk, err := c.SetNX(context.Background(), "xx1", "xxx", 2*time.Second).Result()
+		fmt.Println(okk, err)
 		// x, err := c.Command(context.Background()).Result()
 		x, err := c.Get(context.Background(), "x1").Result()
 		// buf, _ := json.Marshal(res)
