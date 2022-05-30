@@ -3,6 +3,7 @@ package gokv
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -43,8 +44,8 @@ func TestRedisCli(t *testing.T) {
 }
 
 func TestBytesAdd(t *testing.T) {
-	var x1 int64 = -1
-	var x2 int64 = -2000
+	var x1 int64 = math.MaxInt - 255
+	var x2 int64 = 254
 
 	b1 := codec.Int642Bytes(x1)
 	b2 := codec.Int642Bytes(x2)
@@ -52,6 +53,7 @@ func TestBytesAdd(t *testing.T) {
 	fmt.Println(b2)
 	sum := bytesAdd(b1, b2)
 	fmt.Println(codec.Bytes2Int64(sum))
-	fmt.Println(sum)
+	fmt.Println("except", codec.Int642Bytes(x1+x2))
+	fmt.Println("result", sum)
 
 }

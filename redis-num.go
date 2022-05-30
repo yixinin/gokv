@@ -48,10 +48,15 @@ func bytesAdd(b1, b2 []byte) []byte {
 		preOverflow := overflow
 		b1i = b1[i]
 		b1[i] = b1[i] + b2[i]
-		overflow = b1[i] < b1i || b1[i] < b2[i]
 		if preOverflow {
 			b1[i]++
 		}
+		if b1i == 0 || b2[i] == 0 {
+			overflow = b1[i] < b1i || b1[i] < b2[i]
+		} else {
+			overflow = b1[i] <= b1i || b1[i] <= b2[i]
+		}
+
 	}
 	return b1
 }
