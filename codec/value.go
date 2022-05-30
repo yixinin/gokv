@@ -17,7 +17,7 @@ type Value struct {
 	e uint64
 }
 
-func (v Value) CopyFrom(nv Value) {
+func (v *Value) CopyFrom(nv Value) {
 	v.b = nv.b
 	v.e = nv.e
 	v.t = nv.t
@@ -26,7 +26,7 @@ func (v Value) CopyFrom(nv Value) {
 	v.data = nv.data
 }
 
-func (v Value) SetExpireAt(ex uint64) {
+func (v *Value) SetExpireAt(ex uint64) {
 	v.e = ex
 	eb := make([]byte, ExpireSize)
 	binary.BigEndian.PutUint64(eb, ex)
@@ -34,22 +34,22 @@ func (v Value) SetExpireAt(ex uint64) {
 
 }
 
-func (v Value) Set(val []byte) {
+func (v *Value) Set(val []byte) {
 	nv := Encode(val, v.ExpireAt())
 	v.CopyFrom(nv)
 }
 
-func (v Value) SetInt(val int64) {
+func (v *Value) SetInt(val int64) {
 	v.t = IntType
 	v.SetBytes(Int642Bytes(val))
 }
 
-func (v Value) SetFloat(f float64) {
+func (v *Value) SetFloat(f float64) {
 	v.t = FloatType
 	v.SetBytes(Float2Bytes(f))
 }
 
-func (v Value) SetBool(b bool) {
+func (v *Value) SetBool(b bool) {
 	bs := make([]byte, 1)
 	if b {
 		bs[0] = 1
@@ -57,7 +57,7 @@ func (v Value) SetBool(b bool) {
 	v.t = BoolType
 	v.SetBytes(bs)
 }
-func (v Value) SetBytes(bs []byte) {
+func (v *Value) SetBytes(bs []byte) {
 	if len(v.data)-HeaderSize != len(bs) {
 		data := make([]byte, len(bs)+HeaderSize)
 		copy(data[:HeaderSize], v.data[:HeaderSize])
