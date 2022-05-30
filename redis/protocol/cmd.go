@@ -265,6 +265,23 @@ func NewIncrByCmd(base *BaseCmd) *IncrByCmd {
 	return cmd
 }
 
+func NewDecrByCmd(base *BaseCmd) *IncrByCmd {
+	var cmd = &IncrByCmd{
+		BaseCmd: base,
+	}
+	if len(base.args) < 3 {
+		cmd.Err = kverror.ErrCommandArgs
+		return cmd
+	}
+
+	val, _ := codec.StringBytes2Int64(base.args[2])
+	if val != 0 {
+		cmd.Val = -val
+		return cmd
+	}
+	return cmd
+}
+
 func (c *IncrByCmd) Write(w *Writer) error {
 	if c.Err != nil {
 		return c.ErrResp.Write(w)
