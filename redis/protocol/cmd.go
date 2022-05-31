@@ -340,15 +340,18 @@ func (c *CommandsInfoCmd) Write(w *Writer) error {
 type SentinelCmd struct {
 	SubCmd     string
 	MasterAddr [2]string
-	SlaveAddrs [][]string
+	SlaveAddrs map[int][]string
 }
 
 func NewSentinelCmd(args []interface{}) *SentinelCmd {
 	if len(args) < 2 {
-		return &SentinelCmd{}
+		return &SentinelCmd{
+			SlaveAddrs: make(map[int][]string, 2),
+		}
 	}
 	return &SentinelCmd{
-		SubCmd: codec.BytesToString(args[1].([]byte)),
+		SubCmd:     codec.BytesToString(args[1].([]byte)),
+		SlaveAddrs: make(map[int][]string, 2),
 	}
 }
 
@@ -356,12 +359,19 @@ func (c *SentinelCmd) Write(w *Writer) error {
 	switch c.SubCmd {
 	case "sentinels":
 		w.WriteByte(ArrayReply)
-		w.writeLen(len(c.SlaveAddrs))
+		w.writeLen(len(c.SlaveAddrs) + 1)
+		w.writeArray(c.MasterAddr[:]...)
 		for _, v := range c.SlaveAddrs {
 			w.writeArray(v...)
 		}
 	case "get-master-addr-by-name":
 		return w.writeArray(c.MasterAddr[:]...)
+	case "slaves":
+		w.WriteByte(ArrayReply)
+		w.writeLen(len(c.SlaveAddrs))
+		for _, v := range c.SlaveAddrs {
+			w.writeArray(v...)
+		}
 	}
 	return nil
 }

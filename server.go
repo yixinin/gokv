@@ -343,12 +343,14 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			cmd.MasterAddr[0] = leader.Host
 			cmd.MasterAddr[1] = fmt.Sprint(leader.HTTPPort)
 		}
-		for _, node := range n.kv.cfg.ClusterCfg.Nodes {
+		for i, node := range n.kv.cfg.ClusterCfg.Nodes {
 			if node == leader {
 				continue
 			}
-			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"ip", node.Host})
-			cmd.SlaveAddrs = append(cmd.SlaveAddrs, []string{"port", fmt.Sprint(node.HTTPPort)})
+			var s = make([]string, 0, 4)
+			s = append(s, "ip", node.Host)
+			s = append(s, "port", fmt.Sprint(node.HTTPPort))
+			cmd.SlaveAddrs[i] = s
 		}
 		return cmd.Write(client.wr)
 	default:

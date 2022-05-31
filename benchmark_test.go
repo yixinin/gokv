@@ -16,10 +16,14 @@ var client *redis.Client
 
 func TestGet(t *testing.T) {
 	var key = "k1:" + strconv.Itoa(rand.Intn(100))
-	err := client.Get(context.Background(), key).Err()
+	v, err := client.Get(context.Background(), key).Result()
 	if err != nil && err != redis.Nil {
 		t.Error(err)
 	}
+	if err == nil || err == redis.Nil {
+		fmt.Println(key, v, err)
+	}
+
 }
 
 func TestSet(t *testing.T) {
@@ -95,6 +99,37 @@ func TestGokvBenchMark(t *testing.T) {
 	fmt.Println("total ms:", ms)
 }
 
+func TestMaster(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+	client = redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName: "xx",
+		SentinelAddrs: []string{
+			"localhost:6679",
+			"localhost:6579",
+			"localhost:6479",
+		},
+	})
+	for i := 0; i < 100; i++ {
+		TestSet(t)
+	}
+}
+
+func TestSlaveOnly(t *testing.T) {
+	// TestMaster(t)
+	client = redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName: "xx",
+		SentinelAddrs: []string{
+			"localhost:6679",
+			"localhost:6579",
+			"localhost:6479",
+		},
+		SlaveOnly: true,
+	})
+	for i := 0; i < 100; i++ {
+		TestGet(t)
+	}
+
+}
 func TestRedisBenchMark(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	client = redis.NewClient(&redis.Options{
