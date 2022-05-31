@@ -56,13 +56,12 @@ func (w *Writer) writeError(err error) error {
 	return w.bytes(ErrorReply, codec.StringToBytes(err.Error()))
 }
 
-func (w *Writer) writeArray(msg ...string) error {
+func (w *Writer) writeArray(t byte, msg ...string) error {
 	w.WriteByte(ArrayReply)
 	w.writeLen(len(msg))
 	for i := range msg {
-		w.bytes(StringReply, codec.StringToBytes(msg[i]))
+		w.bytes(t, codec.StringToBytes(msg[i]))
 	}
-
 	return nil
 }
 

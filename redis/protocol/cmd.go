@@ -315,26 +315,220 @@ type CommandsInfoCmd struct {
 	Val map[string]CommandInfo
 }
 
-func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
-	return &CommandsInfoCmd{
-		Val: map[string]CommandInfo{
-			"get":    {},
-			"set":    {},
-			"del":    {},
-			"expire": {},
-			"ttl":    {},
-			"incr":   {},
-			"incrby": {},
-			"decr":   {},
-			"decrby": {},
-			"keys":   {},
-			"scan":   {},
+func NewCommandsInfoCmd() *CommandsInfoCmd {
+	var vals = map[string]CommandInfo{
+		"get": {
+			ReadOnly: true,
+			Name:     "get",
+			Arity:    2,
+			Flags: []string{
+				"readonly",
+				"random",
+				"fast",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@read",
+				"@string",
+				"@fast",
+			},
 		},
+		"set": {
+			ReadOnly: false,
+			Name:     "set",
+			Arity:    -3,
+			Flags: []string{
+				"write",
+				"denyoom",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@write",
+				"@string",
+				"@slow",
+			},
+		},
+		"del": {
+			ReadOnly: false,
+			Name:     "del",
+			Arity:    -2,
+			Flags: []string{
+				"write",
+				"denyoom",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  -1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@keyspace",
+				"@write",
+				"@slow",
+			},
+		},
+		"expire": {
+			ReadOnly: false,
+			Name:     "expire",
+			Arity:    3,
+			Flags: []string{
+				"write",
+				"slow",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@keyspace",
+				"@write",
+				"@slow",
+			},
+		},
+		"ttl": {
+			ReadOnly: true,
+			Name:     "ttl",
+			Arity:    2,
+			Flags: []string{
+				"readonly",
+				"random",
+				"fast",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@keyspace",
+				"@read",
+				"@fast",
+			},
+		},
+		"incr": {
+			ReadOnly: false,
+			Name:     "incr",
+			Arity:    2,
+			Flags: []string{
+				"write",
+				"denyoom",
+				"slow",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@write",
+				"@string",
+				"@slow",
+			},
+		},
+		"incrby": {
+			ReadOnly: false,
+			Name:     "incrby",
+			Arity:    3,
+			Flags: []string{
+				"write",
+				"denyoom",
+				"slow",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@write",
+				"@string",
+				"@slow",
+			},
+		},
+		"decr": {
+			ReadOnly: false,
+			Name:     "decr",
+			Arity:    2,
+			Flags: []string{
+				"write",
+				"denyoom",
+				"slow",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@write",
+				"@string",
+				"@slow",
+			},
+		},
+		"decrby": {
+			ReadOnly: false,
+			Name:     "decrby",
+			Arity:    2,
+			Flags: []string{
+				"write",
+				"denyoom",
+				"slow",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@write",
+				"@string",
+				"@slow",
+			},
+		},
+	}
+
+	return &CommandsInfoCmd{
+		Val: vals,
 	}
 }
 
 func (c *CommandsInfoCmd) Write(w *Writer) error {
-	return w.writeError(kverror.ErrNotImpl)
+	if err := w.WriteByte(ArrayReply); err != nil {
+		return err
+	}
+	if err := w.writeLen(len(c.Val)); err != nil {
+		return err
+	}
+
+	for _, info := range c.Val {
+		if err := w.WriteByte(ArrayReply); err != nil {
+			return err
+		}
+		if err := w.writeLen(7); err != nil {
+			return err
+		}
+		if info.ReadOnly {
+			info.Flags = append(info.Flags, "readonly")
+		}
+		// name
+		if err := w.bytes(StringReply, codec.StringToBytes(info.Name)); err != nil {
+			return err
+		}
+		// arity
+		if err := w.int(int64(info.Arity)); err != nil {
+			return err
+		}
+		//flag
+		if err := w.writeArray(StatusReply, info.Flags...); err != nil {
+			return err
+		}
+
+		if err := w.int(int64(info.FirstKeyPos)); err != nil {
+			return err
+		}
+		if err := w.int(int64(info.LastKeyPos)); err != nil {
+			return err
+		}
+		if err := w.int(int64(info.StepCount)); err != nil {
+			return err
+		}
+		//acl flag
+		if err := w.writeArray(StatusReply, info.ACLFlags...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type SentinelCmd struct {
@@ -365,17 +559,17 @@ func (c *SentinelCmd) Write(w *Writer) error {
 		master[1] = c.MasterAddr[0]
 		master[2] = "port"
 		master[3] = c.MasterAddr[1]
-		w.writeArray(master...)
+		w.writeArray(StringReply, master...)
 		for _, v := range c.SlaveAddrs {
-			w.writeArray(v...)
+			w.writeArray(StringReply, v...)
 		}
 	case "get-master-addr-by-name":
-		return w.writeArray(c.MasterAddr[:]...)
+		return w.writeArray(StringReply, c.MasterAddr[:]...)
 	case "slaves":
 		w.WriteByte(ArrayReply)
 		w.writeLen(len(c.SlaveAddrs))
 		for _, v := range c.SlaveAddrs {
-			w.writeArray(v...)
+			w.writeArray(StringReply, v...)
 		}
 	}
 	return nil

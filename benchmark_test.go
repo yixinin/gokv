@@ -74,6 +74,7 @@ func TestGokvBenchMark(t *testing.T) {
 			"localhost:6579",
 			"localhost:6679",
 		},
+		UseDisconnectedSlaves: true,
 	})
 
 	var p = 10000
@@ -96,19 +97,33 @@ func TestGokvBenchMark(t *testing.T) {
 	fmt.Println("total ms:", ms)
 }
 
-func TestMaster(t *testing.T) {
+func TestRandom(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
-	client = redis.NewFailoverClient(&redis.FailoverOptions{
+	client := redis.NewFailoverClusterClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
 			"localhost:6679",
 			"localhost:6579",
 			"localhost:6479",
 		},
+		RouteRandomly: true,
 	})
-	for i := 0; i < 100; i++ {
-		TestSet(t)
+	for i := 0; i < 10; i++ {
+		ok, err := client.Set(context.TODO(), "k1", "va1", time.Second).Result()
+		if err != nil {
+			t.Error(ok, err)
+		}
+		v, err := client.Get(context.TODO(), "k1").Result()
+		switch err {
+		case redis.Nil:
+			fmt.Println("not found")
+		case nil:
+			fmt.Println(v)
+		default:
+			t.Error(err)
+		}
 	}
+
 }
 
 func TestSlaveOnly(t *testing.T) {

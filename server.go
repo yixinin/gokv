@@ -333,8 +333,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "command":
-		_, ok := n.kv.StartSubmit(ctx)
-		cmd := protocol.NewCommandsInfoCmd(ok)
+		cmd := protocol.NewCommandsInfoCmd()
 		return cmd.Write(client.wr)
 	case "sentinel":
 		cmd := protocol.NewSentinelCmd(args)
