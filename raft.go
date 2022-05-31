@@ -168,7 +168,7 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 	}
 
 	for _, submit := range submits {
-		err := s.apply(context.Background(), submit)
+		err := s.apply(context.Background(), submit, index)
 		if err != nil {
 			return false, err
 		}
@@ -200,7 +200,7 @@ func (s *RaftKv) receive(ctx context.Context) {
 	}
 }
 
-func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
+func (s *RaftKv) apply(ctx context.Context, cmd *Submit, index uint64) error {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf(ctx, "apply set [%s %v] error:%v, stacks:%s", cmd.Key, cmd.Value, r, debug.Stack())
@@ -213,9 +213,9 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
 			val := v.String()
 			ex := v.ExpireAt()
 			if ex > 0 {
-				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, ex:%s", cmd.Index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp))
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, ex:%s", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp))
 			} else {
-				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, long live", cmd.Index, cmd.Key, val)
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, long live", index, cmd.Key, val)
 			}
 		}
 		err := s.db.Set(ctx, cmd.Key, cmd.Value)
@@ -225,7 +225,7 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
 		return err
 	case CommitOPDel:
 		if logger.EnableDebug() && s.leader != s.nodeID {
-			logger.Debugf(ctx, "apply del command at index(%v) key:%s", cmd.Index, cmd.Key)
+			logger.Debugf(ctx, "apply del command at index(%v) key:%s", index, cmd.Key)
 		}
 		err := s.db.Delete(ctx, cmd.Key)
 		if err != nil {

@@ -29,7 +29,6 @@ type Submit struct {
 	OP    CommitOP `json:"op"`
 	Key   []byte   `json:"k"`
 	Value []byte   `json:"v,omitempty"`
-	Index uint64   `json:"-"`
 }
 
 func (c *Submit) String() string {
