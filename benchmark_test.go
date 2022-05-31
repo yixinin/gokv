@@ -105,6 +105,7 @@ func TestRandom(t *testing.T) {
 			"localhost:6479",
 		},
 		RouteRandomly: true,
+		SlaveOnly:     false,
 	})
 	for i := 0; i < 100; i++ {
 		if x, err := client.TTL(context.TODO(), "k1").Result(); err != nil || x != -2 {

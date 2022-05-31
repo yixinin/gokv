@@ -14,16 +14,13 @@
 ## How to use
 ``` sh
 cd cmd
-// chmod +x build.sh
-./build.sh
 
-cd node1
+go build
+
 ./cmd -node=1
 
-cd ../node2
 ./cmd -node=2
 
-cd ../node3
 ./cmd -node=3
 
 ```
@@ -31,13 +28,15 @@ cd ../node3
 ## client
 
 ``` go
-    client := redis.NewFailoverClient(&redis.FailoverOptions{
+    client := redis.NewFailoverClusterClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6479",
-			"localhost:6579",
 			"localhost:6679",
+			"localhost:6579",
+			"localhost:6479",
 		},
+		RouteRandomly: true,
+		SlaveOnly:     false,
 	})
 
 ```
