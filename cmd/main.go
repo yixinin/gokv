@@ -29,7 +29,7 @@ import (
 
 var nodeID = flag.Uint64("node", 1, "current node id")
 var confFile = flag.String("conf", "conf/kvs.toml", "config file path")
-var debug = flag.Bool("conf", false, "debug log")
+var debug = flag.Bool("debug", false, "debug log")
 
 func main() {
 	flag.Parse()
