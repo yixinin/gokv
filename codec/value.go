@@ -93,7 +93,7 @@ func (v Value) Expired(now uint64) bool {
 	if v.e == 0 {
 		return false
 	}
-	return now > v.e
+	return now >= v.e
 }
 
 func (v Value) Type() uint8 {

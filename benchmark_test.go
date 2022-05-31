@@ -54,14 +54,12 @@ func TestConcurrency(t *testing.T) {
 			"localhost:6679",
 		},
 	})
-	var ctx = context.Background()
-	client.Set(ctx, "k1", "v1", 0)
-	client.Get(ctx, "k1")
-	client.Get(ctx, "k1")
-	client.Set(ctx, "k1", "v1", 0)
-
-	time.Sleep(2 * time.Second)
-	v, err := client.Get(ctx, "k1").Result()
+	for i := 0; i < 100; i++ {
+		var ctx = context.Background()
+		go client.Incr(ctx, "x1")
+	}
+	time.Sleep(time.Second)
+	v, err := client.Get(context.Background(), "x1").Result()
 	fmt.Println(v, err)
 }
 
@@ -108,7 +106,11 @@ func TestRandom(t *testing.T) {
 		},
 		RouteRandomly: true,
 	})
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
+		if x, err := client.TTL(context.TODO(), "k1").Result(); err != nil || x != -2 {
+			fmt.Println("not nil", x, err)
+			return
+		}
 		ok, err := client.Set(context.TODO(), "k1", "va1", time.Second).Result()
 		if err != nil {
 			t.Error(ok, err)
@@ -122,8 +124,10 @@ func TestRandom(t *testing.T) {
 		default:
 			t.Error(err)
 		}
-	}
 
+		time.Sleep(time.Second + time.Millisecond)
+
+	}
 }
 
 func TestSlaveOnly(t *testing.T) {
