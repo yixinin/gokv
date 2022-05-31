@@ -16,12 +16,9 @@ var client *redis.Client
 
 func TestGet(t *testing.T) {
 	var key = "k1:" + strconv.Itoa(rand.Intn(100))
-	v, err := client.Get(context.Background(), key).Result()
+	err := client.Get(context.Background(), key).Err()
 	if err != nil && err != redis.Nil {
 		t.Error(err)
-	}
-	if err == nil || err == redis.Nil {
-		fmt.Println(key, v, err)
 	}
 
 }
