@@ -20,11 +20,11 @@ func NewBaseImpl(kv kvstore.Kvstore) *_baseImpl {
 }
 
 func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Submit {
-	ct := s.checkExpire(ctx, cmd)
-	if ct != nil {
-		return ct
+	if cmd.DEL {
+		return s.Delete(ctx, cmd.BaseCmd)
 	}
-	if cmd.NX {
+
+	if cmd.NX || cmd.KEEPEX {
 		data, err := s.kv.Get(ctx, cmd.Key)
 		if err != nil {
 			if err != kverror.ErrNotFound {
@@ -33,14 +33,19 @@ func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Submit {
 			}
 		} else {
 			val := codec.Decode(data)
-			if !val.Expired(cmd.Now) {
-				cmd.Err = kverror.ErrNIL
-				return nil
+			if cmd.NX {
+				if !val.Expired(cmd.Now) {
+					cmd.Err = kverror.ErrNIL
+					return nil
+				}
+			}
+
+			if cmd.KEEPEX && !val.Expired(cmd.Now) {
+				cmd.EX = val.ExpireAt()
 			}
 		}
 	}
-	ct = NewSetSubmit(cmd.Key, cmd.Val, cmd.EX)
-	return ct
+	return NewSetSubmit(cmd.Key, cmd.Val, cmd.EX)
 }
 
 func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) *Submit {
@@ -51,6 +56,8 @@ func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) *Submit {
 	}
 	v := codec.Decode(data)
 	if v.Expired(cmd.Now) {
+		cmd.Err = kverror.ErrNIL
+
 		return s.Delete(ctx, cmd.BaseCmd)
 	}
 	cmd.Val = v.StringVal()
@@ -60,11 +67,4 @@ func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) *Submit {
 func (s *_baseImpl) Delete(ctx context.Context, cmd *protocol.BaseCmd) *Submit {
 	cm := NewDelSubmit(cmd.Key)
 	return cm
-}
-
-func (s *_baseImpl) checkExpire(ctx context.Context, cmd *protocol.SetCmd) *Submit {
-	if cmd.EX != 0 && cmd.EX <= cmd.Now {
-		return s.Delete(ctx, cmd.BaseCmd)
-	}
-	return nil
 }

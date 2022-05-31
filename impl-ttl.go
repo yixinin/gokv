@@ -93,18 +93,25 @@ loop:
 				defer recover()
 				var nowUnix = uint64(time.Now().Unix())
 
+				var submits = make([]*Submit, 0, 10)
 				var f = func(key, data []byte) {
 					if v := codec.Decode(data); v.Expired(nowUnix) {
 						st := NewDelSubmit(key)
 						if logger.EnableDebug() {
 							logger.Debugf(ctx, "gc del %s ex:%s, val:%s", key, time.Unix(int64(v.ExpireAt()), 0), v.String())
 						}
-
-						t.SubmitAsync(st)
+						submits = append(submits, st)
 					}
 				}
-
 				t.db.Scan(ctx, f, 0, nil)
+				if len(submits) > 0 {
+					if logger.EnableDebug() {
+						for _, v := range submits {
+							logger.Debugf(ctx, "push submit: %s", v.Key)
+						}
+					}
+					t.queue.Push(submits...)
+				}
 			}()
 			ticker.Reset(time.Second)
 		}

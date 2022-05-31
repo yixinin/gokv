@@ -40,8 +40,15 @@ func (m *mdb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 		limit = math.MaxInt
 	}
 	for i := 0; iter.Next() && i < limit; i++ {
-		key := iter.Key()
-		val := iter.Value()
+		keyRaw := iter.Key()
+		if keyRaw == nil {
+			return
+		}
+		valRaw := iter.Value()
+		var key = make([]byte, len(keyRaw))
+		var val = make([]byte, len(valRaw))
+		copy(key, keyRaw)
+		copy(val, valRaw)
 		f(key, val)
 	}
 }

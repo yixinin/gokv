@@ -102,8 +102,12 @@ type SetCmd struct {
 	*OkResp
 
 	Val []byte
-	EX  uint64
-	NX  bool
+
+	EX     uint64
+	KEEPEX bool
+	DEL    bool
+
+	NX bool
 }
 
 func NewSetCmd(base *BaseCmd) *SetCmd {
@@ -118,6 +122,7 @@ func NewSetCmd(base *BaseCmd) *SetCmd {
 	}
 
 	cmd.Val = base.args[2]
+	cmd.KEEPEX = true
 	for i := 3; i < size; i++ {
 		arg := base.args[i]
 		switch codec.BytesToString(arg) {
@@ -127,6 +132,8 @@ func NewSetCmd(base *BaseCmd) *SetCmd {
 				if ex > 0 {
 					cmd.EX = uint64(ex) + base.Now
 				}
+				cmd.DEL = ex < 0
+				cmd.KEEPEX = ex == 0
 				i++
 			}
 		case NX:

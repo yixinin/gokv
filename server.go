@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"runtime/debug"
@@ -28,10 +29,10 @@ type Message struct {
 
 type Server struct {
 	sync.RWMutex
-	lis       net.Listener
-	clients   map[string]*Client
-	clientCmd chan Message
-	kv        *RaftKv
+	lis         net.Listener
+	clients     map[string]*Client
+	messageChan chan Message
+	kv          *RaftKv
 }
 
 type Client struct {
@@ -43,9 +44,9 @@ type Client struct {
 
 func NewServer(kv *RaftKv) *Server {
 	return &Server{
-		clients:   make(map[string]*Client),
-		clientCmd: make(chan Message, 1024),
-		kv:        kv,
+		clients:     make(map[string]*Client),
+		messageChan: make(chan Message, 100),
+		kv:          kv,
 	}
 }
 
@@ -123,17 +124,19 @@ loop:
 			}
 
 			if err != nil {
-				logger.Errorf(ctx, "receive redis cmd error:%v, conn:%s will be disconnect", err, conn.RemoteAddr())
+				if err != io.EOF {
+					logger.Errorf(ctx, "receive redis cmd error:%v, conn:%s will be disconnect", err, conn.RemoteAddr())
+				}
 				return
 			}
 			switch cmd := cmd.(type) {
 			case []interface{}:
-				n.clientCmd <- Message{
+				n.messageChan <- Message{
 					Addr: conn.RemoteAddr(),
 					args: cmd,
 				}
 			case []byte, string, interface{}:
-				n.clientCmd <- Message{
+				n.messageChan <- Message{
 					Addr: conn.RemoteAddr(),
 					args: []interface{}{cmd},
 				}
@@ -149,7 +152,7 @@ func (n *Server) receive(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case cmd := <-n.clientCmd:
+		case cmd := <-n.messageChan:
 			ctx := context.Background()
 			// ctx = context.WithValue(context.Background(), trace.TraceKey, trace.GenTrace())
 			err := n.handleCmd(ctx, cmd.Addr, cmd.args)

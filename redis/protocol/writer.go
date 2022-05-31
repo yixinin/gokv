@@ -1,14 +1,12 @@
 package protocol
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strconv"
 
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
-	"github.com/yixinin/gokv/logger"
 )
 
 var NIL = []byte("-1")
@@ -82,9 +80,6 @@ func (w *Writer) WriteClose() error {
 }
 
 func (w *Writer) bytes(t byte, b []byte) error {
-	if logger.EnableDebug() {
-		logger.Debugf(context.TODO(), string(b))
-	}
 	if err := w.WriteByte(t); err != nil {
 		return err
 	}

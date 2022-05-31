@@ -77,13 +77,6 @@ func (s *RaftKv) Run(ctx context.Context) {
 	s.initLeveldb(ctx)
 	// start raft
 	s.startRaft(ctx)
-	// start tcp server
-	// s.initTcp(ctx)
-}
-
-func (s *RaftKv) initTcp(ctx context.Context) {
-	// node := s.cfg.FindClusterNode(s.nodeID)
-	// s._netImpl.listen(ctx, uint16(node.HTTPPort))
 }
 
 // Stop stop server
@@ -194,10 +187,14 @@ func (s *RaftKv) receive(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if cmd, ok := s.queue.Pop(); ok {
-				s.process(ctx, cmd)
+			if submit, ok := s.queue.Pop(); ok {
+				logger.Debugf(ctx, "submit async %s %s", submit.OP, submit.Key)
+				_, err := s.process(ctx, submit)
+				if err != nil {
+					logger.Errorf(ctx, "submit async %s %s error:%v", submit.OP, submit.Key, err)
+				}
 			} else {
-				time.Sleep(1)
+				time.Sleep(1 * time.Millisecond)
 			}
 		}
 	}
@@ -211,14 +208,14 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
 	}()
 	switch cmd.OP {
 	case CommitOPSet:
-		if logger.EnableDebug() {
+		if logger.EnableDebug() && s.leader != s.nodeID {
 			v := codec.Decode(cmd.Value)
 			val := v.String()
 			ex := v.ExpireAt()
 			if ex > 0 {
-				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, ex:%s, %v", cmd.Index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, ex:%s", cmd.Index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp))
 			} else {
-				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, forever, %v", cmd.Index, cmd.Key, val, cmd.Value)
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, long live", cmd.Index, cmd.Key, val)
 			}
 		}
 		err := s.db.Set(ctx, cmd.Key, cmd.Value)
@@ -227,7 +224,7 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
 		}
 		return err
 	case CommitOPDel:
-		if logger.EnableDebug() {
+		if logger.EnableDebug() && s.leader != s.nodeID {
 			logger.Debugf(ctx, "apply del command at index(%v) key:%s", cmd.Index, cmd.Key)
 		}
 		err := s.db.Delete(ctx, cmd.Key)
@@ -269,31 +266,34 @@ func (s *RaftKv) HandleLeaderChange(leader uint64) {
 }
 
 func (s *RaftKv) StartSubmit(ctx context.Context) (func(submits ...*Submit) (bool, error), bool) {
-	var commit = func(submits ...*Submit) (bool, error) {
+	var submit = func(submits ...*Submit) (bool, error) {
 		if len(submits) == 0 {
 			return false, nil
 		}
 		defer func() {
 			if r := recover(); r != nil {
 				buf, _ := json.Marshal(submits)
-				logger.Errorf(ctx, "recovered from commit:%s err:%v stacks:%s", buf, r, debug.Stack())
+				logger.Errorf(ctx, "recovered from submit:%s err:%v stacks:%s", buf, r, debug.Stack())
 			}
 		}()
-		if logger.EnableDebug() {
-			for _, ct := range submits {
-				logger.Debugf(ctx, "commit %s %s", ct.OP, ct.Key)
-			}
-		}
 		return s.process(ctx, submits...)
 	}
 	if s.leader != s.nodeID {
-		return commit, false
+		return submit, false
 	}
-	return commit, true
+	return submit, true
 }
 func (s *RaftKv) SubmitAsync(submit *Submit) {
 	if s.leader == s.nodeID {
 		s.queue.Push(submit)
+	}
+}
+func (s *RaftKv) Submit(submit *Submit) {
+	if s.leader == s.nodeID {
+		_, err := s.process(context.TODO(), submit)
+		if err != nil {
+			logger.Errorf(context.TODO(), "submit error:%v", err)
+		}
 	}
 }
 

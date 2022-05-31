@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ import (
 var client *redis.Client
 
 func TestGet(t *testing.T) {
-	var key = "k1"
+	var key = "k1:" + strconv.Itoa(rand.Intn(100))
 	err := client.Get(context.Background(), key).Err()
 	if err != nil && err != redis.Nil {
 		t.Error(err)
@@ -22,23 +23,45 @@ func TestGet(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
-	var k1 = "k1"
+	var key = "k1:" + strconv.Itoa(rand.Intn(100))
 	val := rand.Int()
-	err := client.Set(context.Background(), k1, val, time.Second).Err()
+	err := client.Set(context.Background(), key, val, time.Second).Err()
 	if err != nil {
 		t.Error(err)
 	}
-	err = client.SetNX(context.Background(), "l2", val, time.Second).Err()
+	key = "l2:" + strconv.Itoa(rand.Intn(10))
+	err = client.SetNX(context.Background(), key, val, time.Second).Err()
 	if err != nil && err != redis.Nil {
 		t.Error(err)
 	}
 }
 
 func TestIncr(t *testing.T) {
-	err := client.Incr(context.Background(), "k4").Err()
+	key := "k4:" + strconv.Itoa(rand.Intn(10))
+	err := client.Incr(context.Background(), key).Err()
 	if err != nil {
 		t.Error(err)
 	}
+}
+
+func TestConcurrency(t *testing.T) {
+	client = redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName: "xx",
+		SentinelAddrs: []string{
+			"localhost:6479",
+			"localhost:6579",
+			"localhost:6679",
+		},
+	})
+	var ctx = context.Background()
+	client.Set(ctx, "k1", "v1", 0)
+	client.Get(ctx, "k1")
+	client.Get(ctx, "k1")
+	client.Set(ctx, "k1", "v1", 0)
+
+	time.Sleep(2 * time.Second)
+	v, err := client.Get(ctx, "k1").Result()
+	fmt.Println(v, err)
 }
 
 func TestGokvBenchMark(t *testing.T) {
@@ -52,7 +75,7 @@ func TestGokvBenchMark(t *testing.T) {
 		},
 	})
 
-	var p = 1000
+	var p = 10000
 	var wg sync.WaitGroup
 	var bench = func(t *testing.T) {
 		TestSet(t)

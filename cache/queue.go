@@ -37,15 +37,17 @@ func (q *Queue[T]) Push(items ...T) bool {
 			continue
 		}
 		head := q.Head
-		q.Head = &Node[T]{
+		node := &Node[T]{
 			Val:  item,
 			Next: head,
 		}
+
 		if head != nil {
-			head.Prev = q.Head
+			head.Prev = node
 		} else {
-			q.Tail = q.Head
+			q.Tail = node
 		}
+		q.Head = node
 		q.m[item.UniqueKey()] = struct{}{}
 	}
 	return true
