@@ -188,7 +188,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		cmd := &protocol.PingCommand{}
 		return cmd.Write(client.wr)
 	case "set":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -199,22 +199,21 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.Set(ctx, cmd)
 		if ct != nil {
-			cmd.OK, cmd.Err = commit(ct)
+			cmd.OK, cmd.Err = submit(ct)
 		}
 		return cmd.Write(client.wr)
 	case "get":
-		commit, ok := n.kv.StartCommit(ctx)
 		cmd := protocol.NewGetCmd(base)
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		ct := n.kv.Get(ctx, cmd)
-		if ct != nil && ok {
-			go commit(ct)
+		st := n.kv.Get(ctx, cmd)
+		if st != nil && ok {
+			n.kv.SubmitAsync(st)
 		}
 		return cmd.Write(client.wr)
 	case "del":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -222,25 +221,24 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		ct := n.kv.Delete(ctx, cmd.BaseCmd)
-		if ct != nil {
-			cmd.OK, cmd.Err = commit(ct)
+		st := n.kv.Delete(ctx, cmd.BaseCmd)
+		if st != nil {
+			cmd.OK, cmd.Err = submit(st)
 		}
 
 		return cmd.Write(client.wr)
 	case "ttl":
-		commit, ok := n.kv.StartCommit(ctx)
 		cmd := protocol.NewTTLCmd(base)
 		if cmd.Err != nil {
 			return n.replyLeader(client.wr)
 		}
-		ct := n.kv.TTL(ctx, cmd)
-		if commit != nil && ok {
-			go commit(ct)
+		st := n.kv.TTL(ctx, cmd)
+		if st != nil && ok {
+			n.kv.SubmitAsync(st)
 		}
 		return cmd.Write(client.wr)
 	case "expire":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -250,7 +248,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.ExpireAt(ctx, cmd)
 		if ct != nil {
-			cmd.OK, cmd.Err = commit(ct)
+			cmd.OK, cmd.Err = submit(ct)
 		}
 		return cmd.Write(client.wr)
 	case "hset":
@@ -260,7 +258,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 	case "hgetall":
 		fallthrough
 	case "incrby":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -270,7 +268,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
-			ok, err := commit(ct)
+			ok, err := submit(ct)
 			if !ok {
 				cmd.Val = 0
 			}
@@ -278,7 +276,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "incr":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -288,7 +286,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
-			ok, err := commit(ct)
+			ok, err := submit(ct)
 			if !ok {
 				cmd.Val = 0
 			}
@@ -296,7 +294,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "decrby":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -306,7 +304,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
-			ok, err := commit(ct)
+			ok, err := submit(ct)
 			if !ok {
 				cmd.Val = 0
 			}
@@ -314,7 +312,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "decr":
-		commit, ok := n.kv.StartCommit(ctx)
+		submit, ok := n.kv.StartSubmit(ctx)
 		if !ok {
 			return n.replyLeader(client.wr)
 		}
@@ -324,7 +322,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		ct := n.kv.Incr(ctx, cmd)
 		if ct != nil {
-			ok, err := commit(ct)
+			ok, err := submit(ct)
 			if !ok {
 				cmd.Val = 0
 			}
@@ -332,7 +330,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		}
 		return cmd.Write(client.wr)
 	case "command":
-		_, ok := n.kv.StartCommit(ctx)
+		_, ok := n.kv.StartSubmit(ctx)
 		cmd := protocol.NewCommandsInfoCmd(ok)
 		return cmd.Write(client.wr)
 	case "sentinel":
@@ -354,7 +352,6 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		base.Err = kverror.ErrCommandNotSupport
 		return base.Write(client.wr)
 	}
-	return nil
 }
 
 func (s *Server) replyLeader(w *protocol.Writer) error {

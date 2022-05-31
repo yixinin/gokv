@@ -19,7 +19,7 @@ func NewNumImpl(kv kvstore.Kvstore) *_numImpl {
 	}
 }
 
-func (n *_numImpl) Incr(ctx context.Context, cmd *protocol.IncrByCmd) *Commit {
+func (n *_numImpl) Incr(ctx context.Context, cmd *protocol.IncrByCmd) *Submit {
 	data, err := n.kv.Get(ctx, cmd.Key)
 	if err != nil && err != kverror.ErrNotFound {
 		cmd.Err = err
@@ -28,14 +28,14 @@ func (n *_numImpl) Incr(ctx context.Context, cmd *protocol.IncrByCmd) *Commit {
 	oldV := codec.Decode(data)
 	// set new
 	if oldV.Expired(cmd.Now) || err == kverror.ErrNotFound {
-		return NewSetRawCommit(cmd.Key, codec.EncodeInt(cmd.Val).Raw())
+		return NewSetRawSubmit(cmd.Key, codec.EncodeInt(cmd.Val).Raw())
 	}
 
 	// incr
 	sumB := bytesAdd(data[9:], codec.Int642Bytes(cmd.Val))
 
 	cmd.Val = codec.Bytes2Int64(sumB)
-	return NewSetRawCommit(cmd.Key, data)
+	return NewSetRawSubmit(cmd.Key, data)
 }
 
 func bytesAdd(b1, b2 []byte) []byte {

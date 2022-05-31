@@ -52,7 +52,7 @@ func TestGokvBenchMark(t *testing.T) {
 		},
 	})
 
-	var p = 10000
+	var p = 1000
 	var wg sync.WaitGroup
 	var bench = func(t *testing.T) {
 		TestSet(t)

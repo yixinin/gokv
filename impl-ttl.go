@@ -22,7 +22,7 @@ func NewTTLImpl(kv kvstore.Kvstore) *_ttlImpl {
 	}
 }
 
-func (t *_ttlImpl) ExpireAt(ctx context.Context, cmd *protocol.ExpireCmd) *Commit {
+func (t *_ttlImpl) ExpireAt(ctx context.Context, cmd *protocol.ExpireCmd) *Submit {
 	data, err := t.kv.Get(ctx, cmd.Key)
 	if err != nil {
 		cmd.OK = false
@@ -37,15 +37,15 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, cmd *protocol.ExpireCmd) *Commi
 		return nil
 	}
 	if cmd.Del || (cmd.EX > 0 && cmd.Now >= cmd.EX) {
-		return NewDelCommit(cmd.Key)
+		return NewDelSubmit(cmd.Key)
 	}
 
 	v.SetExpireAt(cmd.EX)
 
-	return NewSetRawCommit(cmd.Key, v.Raw())
+	return NewSetRawSubmit(cmd.Key, v.Raw())
 }
 
-func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
+func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Submit {
 	data, err := t.kv.Get(ctx, ttl.Key)
 	if err != nil {
 		if err == kverror.ErrNotFound {
@@ -58,7 +58,7 @@ func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Commit {
 	v := codec.Decode(data)
 	if v.Expired(ttl.Now) {
 		ttl.TTL = -2
-		return NewDelCommit(ttl.Key)
+		return NewDelSubmit(ttl.Key)
 	}
 
 	if v.ExpireAt() == 0 {
@@ -78,40 +78,35 @@ func (t *RaftKv) GC(ctx context.Context) {
 
 	var ticker = time.NewTicker(time.Second)
 	defer ticker.Stop()
-	var prevKey []byte
 loop:
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			ticker.Stop()
 			if t.leader != t.nodeID {
+				ticker.Reset(time.Second)
 				continue loop
 			}
-			var batch = 10
 			func() {
 				defer recover()
-				commit, _ := t.StartCommit(ctx)
 				var nowUnix = uint64(time.Now().Unix())
-				var i int
-				var cts = make([]*Commit, 0, batch)
-				t.db.Scan(ctx, func(key, data []byte) {
-					if codec.Decode(data).Expired(nowUnix) {
+
+				var f = func(key, data []byte) {
+					if v := codec.Decode(data); v.Expired(nowUnix) {
+						st := NewDelSubmit(key)
 						if logger.EnableDebug() {
-							logger.Debugf(ctx, "gc del %s val:%v", key, data)
+							logger.Debugf(ctx, "gc del %s ex:%s, val:%s", key, time.Unix(int64(v.ExpireAt()), 0), v.String())
 						}
-						cts = append(cts, NewDelCommit(key))
+
+						t.SubmitAsync(st)
 					}
-					prevKey = key
-					i++
-				}, batch, prevKey)
-
-				if i == 0 {
-					prevKey = []byte{}
 				}
-				commit(cts...)
-			}()
 
+				t.db.Scan(ctx, f, 0, nil)
+			}()
+			ticker.Reset(time.Second)
 		}
 	}
 }

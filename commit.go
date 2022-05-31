@@ -25,13 +25,14 @@ func (t CommitOP) String() string {
 }
 
 // Command a raft op command
-type Commit struct {
+type Submit struct {
 	OP    CommitOP `json:"op"`
 	Key   []byte   `json:"k"`
 	Value []byte   `json:"v"`
+	Index uint64   `json:"-"`
 }
 
-func (c *Commit) String() string {
+func (c *Submit) String() string {
 	switch c.OP {
 	case CommitOPSet:
 		return fmt.Sprintf("Set %s %s", string(c.Key), string(c.Value))
@@ -41,9 +42,21 @@ func (c *Commit) String() string {
 		return "<Invalid>"
 	}
 }
+func (c *Submit) UniqueKey() string {
+	return fmt.Sprintf("%s:%s:%s", c.OP, c.Key, c.Value)
+}
+func (c *Submit) Valid() bool {
+	if c == nil {
+		return false
+	}
+	if c.Key == nil || (c.OP != CommitOPDel && c.OP != CommitOPSet) {
+		return false
+	}
+	return true
+}
 
-func NewSetCommit(key, val []byte, ex ...uint64) *Commit {
-	ct := &Commit{
+func NewSetSubmit(key, val []byte, ex ...uint64) *Submit {
+	ct := &Submit{
 		OP:  CommitOPSet,
 		Key: key,
 	}
@@ -51,16 +64,16 @@ func NewSetCommit(key, val []byte, ex ...uint64) *Commit {
 	ct.Value = data.Raw()
 	return ct
 }
-func NewSetRawCommit(key, data []byte) *Commit {
-	return &Commit{
+func NewSetRawSubmit(key, data []byte) *Submit {
+	return &Submit{
 		OP:    CommitOPSet,
 		Key:   key,
 		Value: data,
 	}
 }
 
-func NewDelCommit(key []byte) *Commit {
-	return &Commit{
+func NewDelSubmit(key []byte) *Submit {
+	return &Submit{
 		OP:  CommitOPDel,
 		Key: key,
 	}

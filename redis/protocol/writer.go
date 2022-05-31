@@ -73,9 +73,8 @@ func (w *Writer) WriteWrongArgs(args []interface{}) error {
 	return w.bytes(ErrorReply, codec.StringToBytes(msg))
 }
 func (w *Writer) WriteNotLeader(host string, port uint32) error {
-	w.WriteByte(ErrorReply)
 	msg := fmt.Sprintf("leader %s:%d", host, port)
-	return w.bytes(StringReply, codec.StringToBytes(msg))
+	return w.bytes(ErrorReply, codec.StringToBytes(msg))
 }
 func (w *Writer) WriteClose() error {
 	_, err := w.Write([]byte("EOF"))

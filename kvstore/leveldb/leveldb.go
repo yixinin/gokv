@@ -2,6 +2,7 @@ package leveldb
 
 import (
 	"context"
+	"math"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -28,11 +29,19 @@ func (l *ldb) Delete(ctx context.Context, key []byte) error {
 	return l.db.Delete(key, nil)
 }
 func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
-	slice := util.BytesPrefix(prefix)
+	var slice *util.Range
+	if prefix != nil {
+		slice = util.BytesPrefix(prefix)
+	}
 	iter := l.db.NewIterator(slice, nil)
 	defer iter.Release()
+	if limit <= 0 {
+		limit = math.MaxInt
+	}
 	for i := 0; iter.Next() && i < limit; i++ {
-		f(iter.Key(), iter.Value())
+		key := iter.Key()
+		val := iter.Value()
+		f(key, val)
 	}
 }
 

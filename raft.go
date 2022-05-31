@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime/debug"
 	"time"
 
 	"github.com/tiglabs/raft"
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/storage/wal"
+	"github.com/yixinin/gokv/cache"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/logger"
@@ -44,6 +46,7 @@ type RaftKv struct {
 	node   *ClusterNode // self node
 	leader uint64
 
+	queue *cache.Queue[*Submit]
 	// hs *http.Server
 	rs *raft.RaftServer
 
@@ -58,6 +61,7 @@ func NewRaftKv(nodeID uint64, cfg *Config) *RaftKv {
 	s := &RaftKv{
 		nodeID: nodeID,
 		cfg:    cfg,
+		queue:  cache.NewQueue[*Submit](),
 	}
 	node := cfg.FindClusterNode(nodeID)
 	if node == nil {
@@ -159,55 +163,80 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 		panic(err)
 	}
 	logger.Info(ctx, "raft created.")
+	go s.receive(ctx)
 }
 
 // Apply implement raft StateMachine Apply method
 func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
-	var cmds []*Commit
-	err := json.Unmarshal(command, &cmds)
+	var submits []*Submit
+	err := json.Unmarshal(command, &submits)
 	if err != nil {
 		return false, fmt.Errorf("unmarshal command failed: %v", command)
 	}
 
-	var ctx = context.Background()
-	for _, cmd := range cmds {
-		if cmd == nil {
-			continue
-		}
-		switch cmd.OP {
-		case CommitOPSet:
-			go func(ctx context.Context) {
-				v := codec.Decode(cmd.Value)
-				val := v.String()
-				ex := v.ExpireAt()
-				if logger.EnableDebug() {
-					if ex > 0 {
-						logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, ex:%s, %v", index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
-					} else {
-						logger.Debugf(ctx, "apply set command at index(%v) -> %s : %v, forever, %v", index, cmd.Key, val, cmd.Value)
-					}
-				}
-			}(ctx)
-
-			err := s.db.Set(ctx, cmd.Key, cmd.Value)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		case CommitOPDel:
-			if logger.EnableDebug() {
-				logger.Debugf(ctx, "apply del command at index(%v) -> %s", index, cmd.Key)
-			}
-			err := s.db.Delete(ctx, cmd.Key)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		default:
-			return false, fmt.Errorf("invalid cmd type: %v %s:%v", cmd.OP, cmd.Key, cmd.Value)
+	for _, submit := range submits {
+		err := s.apply(context.Background(), submit)
+		if err != nil {
+			return false, err
 		}
 	}
-	return false, nil
+	return true, nil
+}
+
+func (s *RaftKv) receive(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf(ctx, "apply error:%v, stacks:%s", r, debug.Stack())
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if cmd, ok := s.queue.Pop(); ok {
+				s.process(ctx, cmd)
+			} else {
+				time.Sleep(1)
+			}
+		}
+	}
+}
+
+func (s *RaftKv) apply(ctx context.Context, cmd *Submit) error {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf(ctx, "apply set [%s %v] error:%v, stacks:%s", cmd.Key, cmd.Value, r, debug.Stack())
+		}
+	}()
+	switch cmd.OP {
+	case CommitOPSet:
+		if logger.EnableDebug() {
+			v := codec.Decode(cmd.Value)
+			val := v.String()
+			ex := v.ExpireAt()
+			if ex > 0 {
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, ex:%s, %v", cmd.Index, cmd.Key, val, time.Unix(int64(ex), 0).Local().Format(time.Stamp), cmd.Value)
+			} else {
+				logger.Debugf(ctx, "apply set command at index(%v) key:%s : %v, forever, %v", cmd.Index, cmd.Key, val, cmd.Value)
+			}
+		}
+		err := s.db.Set(ctx, cmd.Key, cmd.Value)
+		if err != nil {
+			logger.Errorf(ctx, "apply set [%s %v] error:%v", cmd.Key, cmd.Value, err)
+		}
+		return err
+	case CommitOPDel:
+		if logger.EnableDebug() {
+			logger.Debugf(ctx, "apply del command at index(%v) key:%s", cmd.Index, cmd.Key)
+		}
+		err := s.db.Delete(ctx, cmd.Key)
+		if err != nil {
+			logger.Errorf(ctx, "apply del [%s] error:%v", cmd.Key, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // ApplyMemberChange implement raft.StateMachine
@@ -239,22 +268,41 @@ func (s *RaftKv) HandleLeaderChange(leader uint64) {
 	s.leader = leader
 }
 
-func (s *RaftKv) StartCommit(ctx context.Context) (func(cmds ...*Commit) (bool, error), bool) {
-	var commit = func(cmds ...*Commit) (bool, error) {
-		return s.process(ctx, cmds)
+func (s *RaftKv) StartSubmit(ctx context.Context) (func(submits ...*Submit) (bool, error), bool) {
+	var commit = func(submits ...*Submit) (bool, error) {
+		if len(submits) == 0 {
+			return false, nil
+		}
+		defer func() {
+			if r := recover(); r != nil {
+				buf, _ := json.Marshal(submits)
+				logger.Errorf(ctx, "recovered from commit:%s err:%v stacks:%s", buf, r, debug.Stack())
+			}
+		}()
+		if logger.EnableDebug() {
+			for _, ct := range submits {
+				logger.Debugf(ctx, "commit %s %s", ct.OP, ct.Key)
+			}
+		}
+		return s.process(ctx, submits...)
 	}
 	if s.leader != s.nodeID {
 		return commit, false
 	}
 	return commit, true
 }
+func (s *RaftKv) SubmitAsync(submit *Submit) {
+	if s.leader == s.nodeID {
+		s.queue.Push(submit)
+	}
+}
 
 func (s *RaftKv) getLeader() *ClusterNode {
 	return s.cfg.FindClusterNode(s.leader)
 }
 
-func (s *RaftKv) process(ctx context.Context, cmds []*Commit) (ok bool, err error) {
-	data, err := json.Marshal(cmds)
+func (s *RaftKv) process(ctx context.Context, submits ...*Submit) (ok bool, err error) {
+	data, err := json.Marshal(submits)
 	if err != nil {
 		logger.Errorf(ctx, "marshal raft command failed: %v", err)
 		return
