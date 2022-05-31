@@ -28,7 +28,7 @@ func (t CommitOP) String() string {
 type Submit struct {
 	OP    CommitOP `json:"op"`
 	Key   []byte   `json:"k"`
-	Value []byte   `json:"v"`
+	Value []byte   `json:"v,omitempty"`
 	Index uint64   `json:"-"`
 }
 
