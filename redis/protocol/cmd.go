@@ -360,7 +360,12 @@ func (c *SentinelCmd) Write(w *Writer) error {
 	case "sentinels":
 		w.WriteByte(ArrayReply)
 		w.writeLen(len(c.SlaveAddrs) + 1)
-		w.writeArray(c.MasterAddr[:]...)
+		var master = make([]string, 4)
+		master[0] = "ip"
+		master[1] = c.MasterAddr[0]
+		master[2] = "port"
+		master[3] = c.MasterAddr[1]
+		w.writeArray(master...)
 		for _, v := range c.SlaveAddrs {
 			w.writeArray(v...)
 		}
