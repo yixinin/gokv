@@ -29,6 +29,7 @@ import (
 
 var nodeID = flag.Uint64("node", 1, "current node id")
 var confFile = flag.String("conf", "conf/kvs.toml", "config file path")
+var debug = flag.Bool("conf", false, "debug log")
 
 func main() {
 	flag.Parse()
@@ -36,7 +37,7 @@ func main() {
 	// load config
 	cfg := gokv.LoadConfig(*confFile, *nodeID)
 
-	if strings.ToLower(cfg.ServerCfg.LogLevel) == "debug" {
+	if strings.ToLower(cfg.ServerCfg.LogLevel) == "debug" || *debug {
 		logger.SetLevel(logrus.DebugLevel)
 	} else {
 		logger.SetLevel(logrus.InfoLevel)

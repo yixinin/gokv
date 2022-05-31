@@ -1,7 +1,7 @@
 [server]
 data-path = "Data/raft-kvs"
 log-path = "Logs/raft-kvs"
-log-level = "debug"
+log-level = "info"
 
 [cluster]
 [[cluster.nodes]]
