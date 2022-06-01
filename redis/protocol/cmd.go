@@ -322,7 +322,6 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 			Name:     "get",
 			Arity:    2,
 			Flags: []string{
-				"readonly",
 				"random",
 				"fast",
 			},
