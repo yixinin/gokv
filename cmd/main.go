@@ -22,9 +22,9 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	raftlog "github.com/tiglabs/raft/logger"
 	"github.com/yixinin/gokv"
 	"github.com/yixinin/gokv/logger"
-	raftlog "github.com/yixinin/raft/logger"
 )
 
 var nodeID = flag.Uint64("node", 1, "current node id")

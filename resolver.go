@@ -3,7 +3,7 @@ package gokv
 import (
 	"fmt"
 
-	"github.com/yixinin/raft"
+	"github.com/tiglabs/raft"
 )
 
 // ClusterResolver implement raft Resolver
