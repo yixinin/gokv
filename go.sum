@@ -35,8 +35,8 @@ github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5Cc
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/syndtr/goleveldb v1.0.0 h1:fBdIW9lB4Iz0n9khmH8w27SJ3QEJ7+IgjPEwGSZiFdE=
 github.com/syndtr/goleveldb v1.0.0/go.mod h1:ZVVdQEZoIme9iO1Ch2Jdy24qqXrMMOU6lpPAyBWyWuQ=
-github.com/yixinin/raft v0.0.1 h1:anpMUnbUU5WFGZgwIzapfSvIAnirP5tK1N4XVrU4uz8=
-github.com/yixinin/raft v0.0.1/go.mod h1:jnf9AZBbi0Fqbn5RjIW0C6Rc1Z89yt5amNiLPbVJRVs=
+github.com/yixinin/raft v0.0.2 h1:B+ZJVEmjqDK7Nk5uQA6xUK0ymsZQ+42xpCKK4Hs3sIA=
+github.com/yixinin/raft v0.0.2/go.mod h1:jnf9AZBbi0Fqbn5RjIW0C6Rc1Z89yt5amNiLPbVJRVs=
 golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 h1:CIJ76btIcR3eFI5EgSo6k1qKw9KJexJuRLI9G7Hp5wE=
 golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
