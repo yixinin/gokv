@@ -8,7 +8,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/sirupsen/logrus v1.7.0
 	github.com/syndtr/goleveldb v1.0.0
-	github.com/yixinin/raft v0.0.1
+	github.com/yixinin/raft v0.0.2
 )
 
 require (
