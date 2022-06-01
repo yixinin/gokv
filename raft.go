@@ -24,13 +24,13 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/tiglabs/raft"
-	"github.com/tiglabs/raft/proto"
-	"github.com/tiglabs/raft/storage/wal"
 	"github.com/yixinin/gokv/cache"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/logger"
+	"github.com/yixinin/raft"
+	"github.com/yixinin/raft/proto"
+	"github.com/yixinin/raft/storage/wal"
 )
 
 // DefaultClusterID the default cluster id, we have only one raft cluster
