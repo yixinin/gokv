@@ -65,6 +65,15 @@ func (w *Writer) writeArray(t byte, msg ...string) error {
 	return nil
 }
 
+func (w *Writer) writeBytesArray(t byte, msg ...[]byte) error {
+	w.WriteByte(ArrayReply)
+	w.writeLen(len(msg))
+	for i := range msg {
+		w.bytes(t, msg[i])
+	}
+	return nil
+}
+
 func (w *Writer) WriteWrongArgs(args []interface{}) error {
 	msg := fmt.Sprintf("args[%v] error", args)
 	return w.bytes(ErrorReply, codec.StringToBytes(msg))

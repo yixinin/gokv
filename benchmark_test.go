@@ -172,3 +172,23 @@ func TestRedisBenchMark(t *testing.T) {
 	ms := time.Since(start).Milliseconds()
 	fmt.Println("total ms:", ms)
 }
+
+func TestConcDel(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		go func() {
+			client = redis.NewFailoverClient(&redis.FailoverOptions{
+				MasterName: "xx",
+				SentinelAddrs: []string{
+					"localhost:6679",
+					"localhost:6579",
+					"localhost:6479",
+				},
+				SlaveOnly: true,
+			})
+			for j := 0; j < 1000; j++ {
+				go client.Del(context.TODO(), fmt.Sprintf("key:%d", rand.Int()))
+			}
+		}()
+	}
+	time.Sleep(1 * time.Minute)
+}

@@ -581,3 +581,44 @@ type PingCommand struct {
 func (c *PingCommand) Write(w *Writer) error {
 	return w.bytes(StatusReply, PONG)
 }
+
+type KeysCmd struct {
+	*BaseCmd
+	Prefix []byte
+
+	Keys [][]byte
+}
+
+func NewKeysCmd(base *BaseCmd) *KeysCmd {
+	cmd := &KeysCmd{
+		BaseCmd: base,
+	}
+	if len(base.args) >= 2 {
+		cmd.Prefix = base.args[1]
+		size := len(cmd.Prefix)
+		if size == 0 {
+			cmd.Err = kverror.ErrCommandArgs
+			return cmd
+		}
+		for i, v := range cmd.Prefix {
+			if v == '*' && i != size-1 {
+				cmd.Err = kverror.ErrCommandArgs
+				return cmd
+			}
+		}
+		if cmd.Prefix[size-1] != '*' {
+			cmd.Err = kverror.ErrCommandArgs
+			return cmd
+		}
+		cmd.Prefix = cmd.Prefix[:size-1]
+	}
+
+	return cmd
+}
+
+func (c *KeysCmd) Write(w *Writer) error {
+	if c.Err != nil {
+		return c.ErrResp.Write(w)
+	}
+	return w.writeBytesArray(StringReply, c.Keys...)
+}

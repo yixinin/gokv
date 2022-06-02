@@ -67,3 +67,13 @@ func (s *_baseImpl) Delete(ctx context.Context, cmd *protocol.BaseCmd) *Submit {
 	cm := NewDelSubmit(cmd.Key)
 	return cm
 }
+
+func (s *_baseImpl) Keys(ctx context.Context, cmd *protocol.KeysCmd) {
+	s.kv.Scan(ctx, func(key, data []byte) {
+		if codec.Decode(data).Expired(cmd.Now) {
+			return
+		}
+		cmd.Keys = append(cmd.Keys, key)
+	}, -1, cmd.Prefix)
+	return
+}
