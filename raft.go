@@ -16,18 +16,19 @@ package gokv
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/tiglabs/raft"
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/storage/wal"
-	"github.com/yixinin/gokv/cache"
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/logger"
@@ -39,6 +40,12 @@ const DefaultClusterID = 1
 // DefaultRequestTimeout default request timeout
 const DefaultRequestTimeout = time.Second * 3
 
+type AppliedIndex int
+
+func (i AppliedIndex) UniqueKey() string {
+	return strconv.Itoa(int(i))
+}
+
 // RaftKv the kv server
 type RaftKv struct {
 	cfg    *Config
@@ -46,9 +53,10 @@ type RaftKv struct {
 	node   *ClusterNode // self node
 	leader uint64
 
-	queue *cache.Queue[*Submit]
 	// hs *http.Server
 	rs *raft.RaftServer
+
+	fs *os.File
 
 	*_baseImpl
 	*_numImpl
@@ -61,7 +69,6 @@ func NewRaftKv(nodeID uint64, cfg *Config) *RaftKv {
 	s := &RaftKv{
 		nodeID: nodeID,
 		cfg:    cfg,
-		queue:  cache.NewQueue[*Submit](),
 	}
 	node := cfg.FindClusterNode(nodeID)
 	if node == nil {
@@ -110,8 +117,14 @@ func (s *RaftKv) initLeveldb(ctx context.Context) {
 	s._baseImpl = NewBaseImpl(s.db)
 	s._numImpl = NewNumImpl(s.db)
 	s._ttlImpl = NewTTLImpl(s.db)
-	go s.GC(ctx)
 	logger.Infof(ctx, "init leveldb sucessfully. path: %v", dbPath)
+
+	idxPath := path.Join(s.cfg.ServerCfg.DataPath, "applied.index")
+	fs, err := os.OpenFile(idxPath, os.O_CREATE|os.O_RDWR, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	s.fs = fs
 }
 
 func (s *RaftKv) startRaft(ctx context.Context) {
@@ -142,6 +155,7 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 		ID:           DefaultClusterID,
 		Storage:      raftStore,
 		StateMachine: s,
+		Applied:      s.getAppliedIndex(),
 	}
 	for _, n := range s.cfg.ClusterCfg.Nodes {
 		rc.Peers = append(rc.Peers, proto.Peer{
@@ -156,7 +170,6 @@ func (s *RaftKv) startRaft(ctx context.Context) {
 		panic(err)
 	}
 	logger.Info(ctx, "raft created.")
-	go s.receive(ctx)
 }
 
 // Apply implement raft StateMachine Apply method
@@ -172,32 +185,23 @@ func (s *RaftKv) Apply(command []byte, index uint64) (interface{}, error) {
 		if err != nil {
 			return false, err
 		}
+		go s.updateAppliedIndex(index)
 	}
 	return true, nil
 }
 
-func (s *RaftKv) receive(ctx context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorf(ctx, "apply error:%v, stacks:%s", r, debug.Stack())
-		}
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if submit, ok := s.queue.Pop(); ok {
-				logger.Debugf(ctx, "submit async %s %s", submit.OP, submit.Key)
-				_, err := s.process(ctx, submit)
-				if err != nil {
-					logger.Errorf(ctx, "submit async %s %s error:%v", submit.OP, submit.Key, err)
-				}
-			} else {
-				time.Sleep(1 * time.Millisecond)
-			}
-		}
+func (s *RaftKv) updateAppliedIndex(index uint64) {
+	s.fs.Seek(0, 0)
+	s.fs.Write(codec.Uint642Bytes(index))
+}
+
+func (s *RaftKv) getAppliedIndex() uint64 {
+	var b = make([]byte, 8)
+	n, _ := s.fs.Read(b)
+	if n != 8 {
+		return 0
 	}
+	return binary.BigEndian.Uint64(b)
 }
 
 func (s *RaftKv) apply(ctx context.Context, cmd *Submit, index uint64) error {
@@ -282,19 +286,6 @@ func (s *RaftKv) StartSubmit(ctx context.Context) (func(submits ...*Submit) (boo
 		return submit, false
 	}
 	return submit, true
-}
-func (s *RaftKv) SubmitAsync(submit *Submit) {
-	if s.leader == s.nodeID {
-		s.queue.Push(submit)
-	}
-}
-func (s *RaftKv) Submit(submit *Submit) {
-	if s.leader == s.nodeID {
-		_, err := s.process(context.TODO(), submit)
-		if err != nil {
-			logger.Errorf(context.TODO(), "submit error:%v", err)
-		}
-	}
 }
 
 func (s *RaftKv) getLeader() *ClusterNode {

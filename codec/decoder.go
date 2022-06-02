@@ -15,7 +15,7 @@ type bytesDecoder struct {
 func (d bytesDecoder) Decode(data []byte) Value {
 	var v = Value{}
 	var size = len(data)
-	if size <= HeaderSize {
+	if size < HeaderSize {
 		return Value{}
 	}
 	v.data = data

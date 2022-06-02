@@ -25,13 +25,8 @@ func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Submit {
 	}
 
 	if cmd.NX || cmd.KEEPEX {
-		data, err := s.kv.Get(ctx, cmd.Key)
-		if err != nil {
-			if err != kverror.ErrNotFound {
-				cmd.Err = err
-				return nil
-			}
-		} else {
+		switch data, err := s.kv.Get(ctx, cmd.Key); err {
+		case nil:
 			val := codec.Decode(data)
 			if cmd.NX {
 				if !val.Expired(cmd.Now) {
@@ -43,25 +38,29 @@ func (s *_baseImpl) Set(ctx context.Context, cmd *protocol.SetCmd) *Submit {
 			if cmd.KEEPEX && !val.Expired(cmd.Now) {
 				cmd.EX = val.ExpireAt()
 			}
+		case kverror.ErrNotFound:
+			// do nothing
+		default:
+			cmd.Err = err
+			return nil
 		}
 	}
 	return NewSetSubmit(cmd.Key, cmd.Val, cmd.EX)
 }
 
-func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) *Submit {
+func (s *_baseImpl) Get(ctx context.Context, cmd *protocol.GetCmd) {
 	data, err := s.kv.Get(ctx, cmd.Key)
 	if err != nil {
 		cmd.Err = err
-		return nil
+		return
 	}
 	v := codec.Decode(data)
 	if v.Expired(cmd.Now) {
 		cmd.Err = kverror.ErrNIL
-
-		return s.Delete(ctx, cmd.BaseCmd)
+		return
 	}
 	cmd.Val = v.StringVal()
-	return nil
+	return
 }
 
 func (s *_baseImpl) Delete(ctx context.Context, cmd *protocol.BaseCmd) *Submit {

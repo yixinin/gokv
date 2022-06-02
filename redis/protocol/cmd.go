@@ -56,13 +56,11 @@ func Command(ctx context.Context, args []interface{}) *BaseCmd {
 		ErrResp: &ErrResp{},
 		args:    make([][]byte, 1, len(args)),
 	}
-	if logger.EnableDebug() {
-		var debugStr = make([]string, 0, len(args))
-		for _, v := range args {
-			debugStr = append(debugStr, codec.BytesToString(v.([]byte)))
-		}
-		logger.Debugf(ctx, "cmd %v", strings.Join(debugStr, " "))
+	var debugStr = make([]string, 0, len(args))
+	for _, v := range args {
+		debugStr = append(debugStr, codec.BytesToString(v.([]byte)))
 	}
+	logger.Infof(ctx, "cmd %s", strings.Join(debugStr, "--"))
 
 	size := len(args)
 	if size == 0 {

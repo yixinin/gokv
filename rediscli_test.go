@@ -57,3 +57,18 @@ func TestBytesAdd(t *testing.T) {
 	fmt.Println("result", sum)
 
 }
+
+func TestNx(t *testing.T) {
+	c := redis.NewFailoverClusterClient(&redis.FailoverOptions{
+		MasterName: "xx",
+		SentinelAddrs: []string{
+			"localhost:6679",
+			"localhost:6579",
+			"localhost:6479",
+		},
+		RouteRandomly: true,
+		SlaveOnly:     false,
+	})
+	ok, err := c.SetNX(context.Background(), "key1", "", 2*time.Second).Result()
+	fmt.Println(ok, err)
+}

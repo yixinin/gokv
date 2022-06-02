@@ -122,7 +122,6 @@ loop:
 			if os.IsTimeout(err) {
 				continue loop
 			}
-
 			if err != nil {
 				if err != io.EOF {
 					logger.Errorf(ctx, "receive redis cmd error:%v, conn:%s will be disconnect", err, conn.RemoteAddr())
@@ -210,10 +209,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		st := n.kv.Get(ctx, cmd)
-		if st != nil && ok {
-			n.kv.SubmitAsync(st)
-		}
+		n.kv.Get(ctx, cmd)
 		return cmd.Write(client.wr)
 	case "del":
 		submit, ok := n.kv.StartSubmit(ctx)
@@ -235,10 +231,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return n.replyLeader(client.wr)
 		}
-		st := n.kv.TTL(ctx, cmd)
-		if st != nil && ok {
-			n.kv.SubmitAsync(st)
-		}
+		n.kv.TTL(ctx, cmd)
 		return cmd.Write(client.wr)
 	case "expire":
 		submit, ok := n.kv.StartSubmit(ctx)

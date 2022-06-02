@@ -145,11 +145,11 @@ func (r *Reader) readStringReply(line []byte) ([]byte, error) {
 	}
 
 	b := make([]byte, replyLen+2)
+
 	_, err = io.ReadFull(r.rd, b)
 	if err != nil {
 		return nil, err
 	}
-
 	return b[:replyLen], nil
 }
 
