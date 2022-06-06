@@ -622,3 +622,72 @@ func (c *KeysCmd) Write(w *Writer) error {
 	}
 	return w.writeBytesArray(StringReply, c.Keys...)
 }
+
+type ScanCmd struct {
+	*BaseCmd
+	Prefix []byte
+	Limit  uint64
+	Cursor uint64
+	Keys   [][]byte
+}
+
+func NewScanCmd(base *BaseCmd) *ScanCmd {
+	argsSize := len(base.args)
+	cmd := &ScanCmd{
+		BaseCmd: base,
+		Limit:   10,
+	}
+	if len(base.args) < 2 {
+		cmd.Err = kverror.ErrCommandArgs
+		return cmd
+	}
+	cmd.Cursor, _ = codec.StringBytes2Uint64(base.args[1])
+	for i := 2; i < len(base.args); i++ {
+		if i != argsSize-1 {
+			switch strings.ToLower(codec.BytesToString(base.args[i])) {
+			case "match":
+				i++
+				cmd.Prefix = base.args[i]
+				size := len(cmd.Prefix)
+				if size == 0 {
+					cmd.Err = kverror.ErrCommandArgs
+					return cmd
+				}
+				for i, v := range cmd.Prefix {
+					if v == '*' && i != size-1 {
+						cmd.Err = kverror.ErrCommandArgs
+						return cmd
+					}
+				}
+				if cmd.Prefix[size-1] != '*' {
+					cmd.Err = kverror.ErrCommandArgs
+					return cmd
+				}
+				cmd.Prefix = cmd.Prefix[:size-1]
+			case "count":
+				i++
+				cmd.Limit, _ = codec.StringBytes2Uint64(base.args[i])
+			case "type":
+				return cmd
+			}
+		}
+
+	}
+	return cmd
+}
+
+func (c *ScanCmd) Write(w *Writer) error {
+	if c.Err != nil {
+		return c.ErrResp.Write(w)
+	}
+	if err := w.WriteByte(ArrayReply); err != nil {
+		return err
+	}
+	if err := w.writeLen(2); err != nil {
+		return err
+	}
+	if err := w.bytes(StringReply, codec.StringToBytes(strconv.FormatUint(c.Cursor, 10))); err != nil {
+		return err
+	}
+	return w.writeBytesArray(StringReply, c.Keys...)
+}

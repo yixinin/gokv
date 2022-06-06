@@ -333,6 +333,12 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		n.kv.Keys(ctx, cmd)
 		return cmd.Write(client.wr)
 	case "scan":
+		cmd := protocol.NewScanCmd(base)
+		if cmd.Err != nil {
+			return cmd.Write(client.wr)
+		}
+		n.kv.Scan(ctx, cmd)
+		return cmd.Write(client.wr)
 	case "command":
 		cmd := protocol.NewCommandsInfoCmd()
 		return cmd.Write(client.wr)

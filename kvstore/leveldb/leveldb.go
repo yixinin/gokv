@@ -28,7 +28,7 @@ func (l *ldb) Get(ctx context.Context, key []byte) ([]byte, error) {
 func (l *ldb) Delete(ctx context.Context, key []byte) error {
 	return l.db.Delete(key, nil)
 }
-func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, prefix []byte) {
+func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), skip, limit int, prefix []byte) uint64 {
 	var slice *util.Range
 	if prefix != nil {
 		slice = util.BytesPrefix(prefix)
@@ -38,10 +38,16 @@ func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 	if limit <= 0 {
 		limit = math.MaxInt
 	}
+	if skip > 0 {
+		for i := 0; i < skip; i++ {
+			iter.Next()
+		}
+	}
+	var next = 0
 	for i := 0; iter.Next() && i < limit; i++ {
 		keyRaw := iter.Key()
 		if keyRaw == nil {
-			return
+			return 0
 		}
 		valRaw := iter.Value()
 		var key = make([]byte, len(keyRaw))
@@ -49,7 +55,9 @@ func (l *ldb) Scan(ctx context.Context, f func(key, data []byte), limit int, pre
 		copy(key, keyRaw)
 		copy(val, valRaw)
 		f(key, val)
+		next = skip + i
 	}
+	return uint64(next)
 }
 
 func (m *ldb) Close(ctx context.Context) error {

@@ -74,6 +74,21 @@ func (s *_baseImpl) Keys(ctx context.Context, cmd *protocol.KeysCmd) {
 			return
 		}
 		cmd.Keys = append(cmd.Keys, key)
-	}, -1, cmd.Prefix)
+	}, 0, -1, cmd.Prefix)
+	return
+}
+
+func (s *_baseImpl) Scan(ctx context.Context, cmd *protocol.ScanCmd) {
+	var limit = -1
+	if cmd.Limit > 0 {
+		limit = int(cmd.Limit)
+	}
+	cmd.Cursor = s.kv.Scan(ctx, func(key, data []byte) {
+		if codec.Decode(data).Expired(cmd.Now) {
+			return
+		}
+		cmd.Keys = append(cmd.Keys, key)
+	}, int(cmd.Cursor), limit, cmd.Prefix)
+
 	return
 }
