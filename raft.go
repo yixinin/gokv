@@ -30,6 +30,7 @@ import (
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/storage/wal"
 	"github.com/yixinin/gokv/codec"
+	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
 	"github.com/yixinin/gokv/logger"
 )
@@ -236,6 +237,24 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit, index uint64) error {
 			logger.Errorf(ctx, "apply del [%s] error:%v", cmd.Key, err)
 		}
 		return err
+	case CommitOPExDel:
+		if logger.EnableDebug() && s.leader != s.nodeID {
+			logger.Debugf(ctx, "apply exdel command at index(%v) key:%s", index, cmd.Key)
+		}
+		data, err := s.db.Get(ctx, cmd.Key)
+		if err != nil {
+			if errors.Is(err, kverror.ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		if codec.Decode(data).Expired(uint64(time.Now().Unix())) {
+			err := s.db.Delete(ctx, cmd.Key)
+			if err != nil {
+				logger.Errorf(ctx, "apply exdel [%s] error:%v", cmd.Key, err)
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -288,11 +307,18 @@ func (s *RaftKv) StartSubmit(ctx context.Context) (func(submits ...*Submit) (boo
 	return submit, true
 }
 
+func (s *RaftKv) SubmitAsync(submits ...*Submit) {
+	go s.process(context.Background(), submits...)
+}
+
 func (s *RaftKv) getLeader() *ClusterNode {
 	return s.cfg.FindClusterNode(s.leader)
 }
 
 func (s *RaftKv) process(ctx context.Context, submits ...*Submit) (ok bool, err error) {
+	if len(submits) == 0 || submits[0] == nil {
+		return
+	}
 	data, err := json.Marshal(submits)
 	if err != nil {
 		logger.Errorf(ctx, "marshal raft command failed: %v", err)

@@ -2,10 +2,13 @@ package gokv
 
 import (
 	"context"
+	"runtime/debug"
+	"time"
 
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
 	"github.com/yixinin/gokv/kvstore"
+	"github.com/yixinin/gokv/logger"
 	"github.com/yixinin/gokv/redis/protocol"
 )
 
@@ -42,75 +45,80 @@ func (t *_ttlImpl) ExpireAt(ctx context.Context, cmd *protocol.ExpireCmd) *Submi
 	return NewSetRawSubmit(cmd.Key, v.Raw())
 }
 
-func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) {
+func (t *_ttlImpl) TTL(ctx context.Context, ttl *protocol.TTLCmd) *Submit {
 	data, err := t.kv.Get(ctx, ttl.Key)
 	if err != nil {
 		if err == kverror.ErrNotFound {
 			ttl.TTL = -2
-			return
+			return nil
 		}
 		ttl.Err = err
-		return
+		return nil
 	}
 	v := codec.Decode(data)
 	if v.Expired(ttl.Now) {
 		ttl.TTL = -2
-		return
+		return NewExDelSubmit(ttl.Key)
 	}
 
 	if v.ExpireAt() == 0 {
 		ttl.TTL = -1
-		return
+		return nil
 	}
 	ttl.TTL = int64(v.ExpireAt() - ttl.Now)
-	return
+	return nil
 }
 
-// func (t *RaftKv) GC(ctx context.Context) {
-// 	defer func() {
-// 		if r := recover(); r != nil {
-// 			logger.Errorf(ctx, "ttl gc recovered %v, stacks:%s", r, debug.Stack())
-// 		}
-// 	}()
+const (
+	GC_EPOCH = 100
+)
 
-// 	var ticker = time.NewTicker(time.Second)
-// 	defer ticker.Stop()
-// loop:
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return
-// 		case <-ticker.C:
-// 			ticker.Stop()
-// 			if t.leader != t.nodeID {
-// 				ticker.Reset(time.Second)
-// 				continue loop
-// 			}
-// 			func() {
-// 				defer recover()
-// 				var nowUnix = uint64(time.Now().Unix())
+func (t *RaftKv) GC(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf(ctx, "ttl gc recovered %v, stacks:%s", r, debug.Stack())
+		}
+	}()
+	var Next uint64
+	var ticker = time.NewTicker(time.Second)
+	defer ticker.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ticker.Stop()
+			if t.leader != t.nodeID {
+				ticker.Reset(time.Second)
+				continue loop
+			}
+			func() {
+				defer recover()
+				var nowUnix = uint64(time.Now().Unix())
 
-// 				var submits = make([]*Submit, 0, 10)
-// 				var f = func(key, data []byte) {
-// 					if v := codec.Decode(data); v.Expired(nowUnix) {
-// 						st := NewDelSubmit(key)
-// 						if logger.EnableDebug() {
-// 							logger.Debugf(ctx, "gc del %s ex:%s, val:%s", key, time.Unix(int64(v.ExpireAt()), 0), v.String())
-// 						}
-// 						submits = append(submits, st)
-// 					}
-// 				}
-// 				t.db.Scan(ctx, f, 0, nil)
-// 				if len(submits) > 0 {
-// 					if logger.EnableDebug() {
-// 						for _, v := range submits {
-// 							logger.Debugf(ctx, "push submit: %s", v.Key)
-// 						}
-// 					}
-// 					t.queue.Push(submits...)
-// 				}
-// 			}()
-// 			ticker.Reset(time.Second)
-// 		}
-// 	}
-// }
+				var submits = make([]*Submit, 0, 100)
+				var f = func(key, data []byte) {
+					if v := codec.Decode(data); v.Expired(nowUnix) {
+						st := NewExDelSubmit(key)
+						if logger.EnableDebug() {
+							logger.Debugf(ctx, "gc del %s ex:%s, val:%s", key, time.Unix(int64(v.ExpireAt()), 0), v.String())
+						}
+						submits = append(submits, st)
+					}
+				}
+				Next = t.db.Scan(ctx, f, int(Next), GC_EPOCH, nil)
+				if len(submits) > 0 {
+					if logger.EnableDebug() {
+						for _, v := range submits {
+							logger.Debugf(ctx, "push submit: %s", v.Key)
+						}
+					}
+					submit, _ := t.StartSubmit(ctx)
+					submit(submits...)
+				}
+			}()
+			ticker.Reset(time.Second)
+		}
+	}
+}

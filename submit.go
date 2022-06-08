@@ -10,8 +10,9 @@ import (
 type CommitOP int
 
 const (
-	CommitOPSet CommitOP = 1
-	CommitOPDel CommitOP = 2
+	CommitOPSet   CommitOP = 1
+	CommitOPDel   CommitOP = 2
+	CommitOPExDel CommitOP = 3
 )
 
 func (t CommitOP) String() string {
@@ -20,6 +21,8 @@ func (t CommitOP) String() string {
 		return "set"
 	case CommitOPDel:
 		return "del"
+	case CommitOPExDel:
+		return "exdel"
 	}
 	return strconv.Itoa(int(t))
 }
@@ -34,9 +37,11 @@ type Submit struct {
 func (c *Submit) String() string {
 	switch c.OP {
 	case CommitOPSet:
-		return fmt.Sprintf("Set %s %s", string(c.Key), string(c.Value))
+		return fmt.Sprintf("Set %s %s", c.Key, c.Value)
 	case CommitOPDel:
-		return fmt.Sprintf("Delete %s", string(c.Key))
+		return fmt.Sprintf("Delete %s", c.Key)
+	case CommitOPExDel:
+		return fmt.Sprintf("ExDel %s", c.Key)
 	default:
 		return "<Invalid>"
 	}
@@ -74,6 +79,13 @@ func NewSetRawSubmit(key, data []byte) *Submit {
 func NewDelSubmit(key []byte) *Submit {
 	return &Submit{
 		OP:  CommitOPDel,
+		Key: key,
+	}
+}
+
+func NewExDelSubmit(key []byte) *Submit {
+	return &Submit{
+		OP:  CommitOPExDel,
 		Key: key,
 	}
 }

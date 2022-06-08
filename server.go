@@ -209,7 +209,8 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		n.kv.Get(ctx, cmd)
+		submit := n.kv.Get(ctx, cmd)
+		n.kv.SubmitAsync(submit)
 		return cmd.Write(client.wr)
 	case "del":
 		submit, ok := n.kv.StartSubmit(ctx)
@@ -231,7 +232,8 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return n.replyLeader(client.wr)
 		}
-		n.kv.TTL(ctx, cmd)
+		submit := n.kv.TTL(ctx, cmd)
+		n.kv.SubmitAsync(submit)
 		return cmd.Write(client.wr)
 	case "expire":
 		submit, ok := n.kv.StartSubmit(ctx)
@@ -330,14 +332,16 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		n.kv.Keys(ctx, cmd)
+		submits := n.kv.Keys(ctx, cmd)
+		n.kv.SubmitAsync(submits...)
 		return cmd.Write(client.wr)
 	case "scan":
 		cmd := protocol.NewScanCmd(base)
 		if cmd.Err != nil {
 			return cmd.Write(client.wr)
 		}
-		n.kv.Scan(ctx, cmd)
+		submits := n.kv.Scan(ctx, cmd)
+		n.kv.SubmitAsync(submits...)
 		return cmd.Write(client.wr)
 	case "command":
 		cmd := protocol.NewCommandsInfoCmd()

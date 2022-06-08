@@ -60,6 +60,7 @@ func main() {
 	// start kv
 	kv := gokv.NewRaftKv(*nodeID, cfg)
 	go kv.Run(ctx)
+	go kv.GC(ctx)
 	server := gokv.NewServer(kv)
 	go server.Run(ctx, cfg.FindClusterNode(*nodeID).HTTPPort)
 
