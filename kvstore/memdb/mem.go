@@ -8,6 +8,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/comparer"
 	"github.com/syndtr/goleveldb/leveldb/memdb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
 )
 
@@ -41,11 +42,16 @@ func (m *mdb) Scan(ctx context.Context, f func(key, data []byte), skip, limit in
 	}
 	if skip > 0 {
 		for i := 0; i < skip; i++ {
-			iter.Next()
+			if !iter.Next() {
+				return 0
+			}
 		}
 	}
-	var next = 0
-	for i := 0; iter.Next() && i < limit; i++ {
+	var i int
+	for i < limit {
+		if !iter.Next() {
+			return 0
+		}
 		keyRaw := iter.Key()
 		if keyRaw == nil {
 			return 0
@@ -56,9 +62,14 @@ func (m *mdb) Scan(ctx context.Context, f func(key, data []byte), skip, limit in
 		copy(key, keyRaw)
 		copy(val, valRaw)
 		f(key, val)
-		next = skip + i
+		i++
+		if i == limit && iter.Last() {
+			if codec.BytesEq(iter.Key(), key) {
+				return 0
+			}
+		}
 	}
-	return uint64(next)
+	return uint64(skip + i)
 }
 
 func (m *mdb) Close(ctx context.Context) error {

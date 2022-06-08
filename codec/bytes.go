@@ -52,3 +52,15 @@ func Bytes2Float(b []byte) float64 {
 	binary.Read(bytes.NewBuffer(b), binary.BigEndian, &f)
 	return f
 }
+
+func BytesEq(s1, s2 []byte) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return false
+		}
+	}
+	return true
+}
