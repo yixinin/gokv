@@ -7,23 +7,23 @@ log-level = "info"
 [[cluster.nodes]]
 node-id=1
 host="localhost"
-http-port=6479
-heartbeat-port=6480
-replicate-port=6481
+http-port=9001
+heartbeat-port=9101
+replicate-port=9201
 
 [[cluster.nodes]]
 node-id=2
 host="localhost"
-http-port=6579
-heartbeat-port=6580
-replicate-port=6581
+http-port=9002
+heartbeat-port=9102
+replicate-port=9302
 
 [[cluster.nodes]]
 node-id=3
 host="localhost"
-http-port=6679
-heartbeat-port=6680
-replicate-port=6681
+http-port=9003
+heartbeat-port=9103
+replicate-port=9203
 
 # [[cluster.nodes]]
 # node-id=4
