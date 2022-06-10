@@ -16,3 +16,4 @@ cmd/node3/cmd
 
 __debug_bin.exe
 __debug_bin
+cmd/conf/kvs.toml
