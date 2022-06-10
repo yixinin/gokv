@@ -194,19 +194,29 @@ func TestConcDel(t *testing.T) {
 }
 
 func TestSetNx(t *testing.T) {
+	var count int
+	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
-		client := redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName: "xx",
-			SentinelAddrs: []string{
-				"10.168.18.16:9003",
-				"10.168.18.16:9001",
-				"10.168.18.16:9002",
-			},
-		})
+		wg.Add(1)
 		go func() {
-			ok, err := client.SetNX(context.Background(), "key1", "", time.Second*10).Result()
-			fmt.Println(ok, err)
+			client := redis.NewFailoverClusterClient(&redis.FailoverOptions{
+				MasterName: "xx",
+				SentinelAddrs: []string{
+					"10.168.18.16:9003",
+					"10.168.18.16:9001",
+					"10.168.18.16:9002",
+				},
+				RouteRandomly: true,
+			})
+			ok, _ := client.SetNX(context.Background(), "key11", "", time.Second*10).Result()
+			if ok {
+				count++
+			}
+			wg.Done()
 		}()
 	}
-	time.Sleep(2 * time.Second)
+	wg.Wait()
+	if count != 1 {
+		t.Fail()
+	}
 }
