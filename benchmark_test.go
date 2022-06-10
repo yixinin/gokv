@@ -176,7 +176,7 @@ func TestRedisBenchMark(t *testing.T) {
 func TestConcDel(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
-			client = redis.NewFailoverClient(&redis.FailoverOptions{
+			client := redis.NewFailoverClient(&redis.FailoverOptions{
 				MasterName: "xx",
 				SentinelAddrs: []string{
 					"localhost:6679",
@@ -191,4 +191,22 @@ func TestConcDel(t *testing.T) {
 		}()
 	}
 	time.Sleep(1 * time.Minute)
+}
+
+func TestSetNx(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		client := redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName: "xx",
+			SentinelAddrs: []string{
+				"10.168.18.16:9003",
+				"10.168.18.16:9001",
+				"10.168.18.16:9002",
+			},
+		})
+		go func() {
+			ok, err := client.SetNX(context.Background(), "key1", "", time.Second*10).Result()
+			fmt.Println(ok, err)
+		}()
+	}
+	time.Sleep(2 * time.Second)
 }
