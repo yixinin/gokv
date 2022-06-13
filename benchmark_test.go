@@ -49,9 +49,9 @@ func TestConcurrency(t *testing.T) {
 	client = redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6479",
-			"localhost:6579",
-			"localhost:6679",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 	})
 	for i := 0; i < 100; i++ {
@@ -68,9 +68,9 @@ func TestGokvBenchMark(t *testing.T) {
 	client = redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6479",
-			"localhost:6579",
-			"localhost:6679",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 		UseDisconnectedSlaves: true,
 	})
@@ -100,9 +100,9 @@ func TestRandom(t *testing.T) {
 	client := redis.NewFailoverClusterClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6679",
-			"localhost:6579",
-			"localhost:6479",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 		RouteRandomly: true,
 		SlaveOnly:     false,
@@ -136,9 +136,9 @@ func TestSlaveOnly(t *testing.T) {
 	client = redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6679",
-			"localhost:6579",
-			"localhost:6479",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 		SlaveOnly: true,
 	})
@@ -179,9 +179,9 @@ func TestConcDel(t *testing.T) {
 			client := redis.NewFailoverClient(&redis.FailoverOptions{
 				MasterName: "xx",
 				SentinelAddrs: []string{
-					"localhost:6679",
-					"localhost:6579",
-					"localhost:6479",
+					"localhost:9001",
+					"localhost:9002",
+					"localhost:9003",
 				},
 				SlaveOnly: true,
 			})
@@ -202,9 +202,9 @@ func TestSetNx(t *testing.T) {
 			client := redis.NewFailoverClusterClient(&redis.FailoverOptions{
 				MasterName: "xx",
 				SentinelAddrs: []string{
-					"10.168.18.16:9003",
-					"10.168.18.16:9001",
-					"10.168.18.16:9002",
+					"localhost:9001",
+					"localhost:9002",
+					"localhost:9003",
 				},
 				RouteRandomly: true,
 			})

@@ -97,7 +97,7 @@ loop:
 				defer recover()
 				var nowUnix = uint64(time.Now().Unix())
 
-				var submits = make([]*Submit, 0, 100)
+				var submits = make([]*Submit, 0, GC_EPOCH)
 				var f = func(key, data []byte) {
 					if v := codec.Decode(data); v.Expired(nowUnix) {
 						st := NewExDelSubmit(key)

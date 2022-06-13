@@ -62,7 +62,7 @@ func Command(ctx context.Context, args []interface{}) *BaseCmd {
 			debugStr = append(debugStr, codec.BytesToString(v.([]byte)))
 		}
 
-		logger.Debugf(ctx, "cmd %s", strings.Join(debugStr, "--"))
+		logger.Debugf(ctx, "cmd: %s", strings.Join(debugStr, " "))
 	}
 
 	size := len(args)
@@ -563,7 +563,7 @@ func (c *SentinelCmd) Write(w *Writer) error {
 		for _, v := range c.SlaveAddrs {
 			w.writeArray(StringReply, v...)
 		}
-	case "get-master-addr-by-name":
+	case "get-master-addr-by-name", "master":
 		return w.writeArray(StringReply, c.MasterAddr[:]...)
 	case "slaves":
 		w.WriteByte(ArrayReply)

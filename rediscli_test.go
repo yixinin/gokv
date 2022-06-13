@@ -15,9 +15,9 @@ func TestRedisCli(t *testing.T) {
 	c := redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6479",
-			"localhost:6579",
-			"localhost:6679",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 	})
 
@@ -62,9 +62,9 @@ func TestNx(t *testing.T) {
 	c := redis.NewFailoverClusterClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:6679",
-			"localhost:6579",
-			"localhost:6479",
+			"localhost:9001",
+			"localhost:9002",
+			"localhost:9003",
 		},
 		RouteRandomly: true,
 		SlaveOnly:     false,
