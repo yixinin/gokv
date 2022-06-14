@@ -323,7 +323,6 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 			Name:     "get",
 			Arity:    2,
 			Flags: []string{
-				"random",
 				"fast",
 			},
 			FirstKeyPos: 1,
@@ -351,6 +350,39 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@keyspace",
 				"@read",
 				"@fast",
+			},
+		},
+		"keys": {
+			ReadOnly: true,
+			Name:     "keys",
+			Arity:    2,
+			Flags: []string{
+				"sort_for_script",
+			},
+			FirstKeyPos: 0,
+			LastKeyPos:  0,
+			StepCount:   0,
+			ACLFlags: []string{
+				"@keyspace",
+				"@read",
+				"@slow",
+				"@dangerous",
+			},
+		},
+		"scan": {
+			ReadOnly: true,
+			Name:     "scan",
+			Arity:    -2,
+			Flags: []string{
+				"random",
+			},
+			FirstKeyPos: 0,
+			LastKeyPos:  0,
+			StepCount:   0,
+			ACLFlags: []string{
+				"@keyspace",
+				"@read",
+				"@slow",
 			},
 		},
 	}
