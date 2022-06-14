@@ -79,7 +79,7 @@ func (w *Writer) WriteWrongArgs(args []interface{}) error {
 	return w.bytes(ErrorReply, codec.StringToBytes(msg))
 }
 func (w *Writer) WriteNotLeader(host string, port uint32) error {
-	msg := fmt.Sprintf("leader %s:%d", host, port)
+	msg := fmt.Sprintf("MOVED %s:%d", host, port)
 	return w.bytes(ErrorReply, codec.StringToBytes(msg))
 }
 func (w *Writer) WriteClose() error {

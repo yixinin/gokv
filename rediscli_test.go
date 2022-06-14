@@ -63,12 +63,16 @@ func TestNx(t *testing.T) {
 		MasterName: "xx",
 		SentinelAddrs: []string{
 			"localhost:9001",
-			"localhost:9002",
-			"localhost:9003",
+			// "localhost:9002",
+			// "localhost:9003",
 		},
 		RouteRandomly: true,
 		SlaveOnly:     false,
 	})
-	ok, err := c.SetNX(context.Background(), "key1", "", 2*time.Second).Result()
+	ok, err := c.SetNX(context.Background(), "key1", "nx val", 5*time.Second).Result()
 	fmt.Println(ok, err)
+	val, err := c.Get(context.Background(), "key1").Result()
+	fmt.Println(val, err)
+	ttl, err := c.TTL(context.Background(), "key1").Result()
+	fmt.Println(ttl, err)
 }

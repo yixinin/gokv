@@ -316,8 +316,8 @@ type CommandsInfoCmd struct {
 	Val map[string]CommandInfo
 }
 
-func NewCommandsInfoCmd() *CommandsInfoCmd {
-	var vals = map[string]CommandInfo{
+func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
+	var rs = map[string]CommandInfo{
 		"get": {
 			ReadOnly: true,
 			Name:     "get",
@@ -335,6 +335,27 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 				"@fast",
 			},
 		},
+		"ttl": {
+			ReadOnly: true,
+			Name:     "ttl",
+			Arity:    2,
+			Flags: []string{
+				"readonly",
+				"random",
+				"fast",
+			},
+			FirstKeyPos: 1,
+			LastKeyPos:  1,
+			StepCount:   1,
+			ACLFlags: []string{
+				"@keyspace",
+				"@read",
+				"@fast",
+			},
+		},
+	}
+
+	var ws = map[string]CommandInfo{
 		"set": {
 			ReadOnly: false,
 			Name:     "set",
@@ -384,24 +405,6 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 				"@keyspace",
 				"@write",
 				"@slow",
-			},
-		},
-		"ttl": {
-			ReadOnly: true,
-			Name:     "ttl",
-			Arity:    2,
-			Flags: []string{
-				"readonly",
-				"random",
-				"fast",
-			},
-			FirstKeyPos: 1,
-			LastKeyPos:  1,
-			StepCount:   1,
-			ACLFlags: []string{
-				"@keyspace",
-				"@read",
-				"@fast",
 			},
 		},
 		"incr": {
@@ -478,8 +481,16 @@ func NewCommandsInfoCmd() *CommandsInfoCmd {
 		},
 	}
 
+	if !isLeader {
+		return &CommandsInfoCmd{
+			Val: rs,
+		}
+	}
+	for k, v := range rs {
+		ws[k] = v
+	}
 	return &CommandsInfoCmd{
-		Val: vals,
+		Val: ws,
 	}
 }
 
