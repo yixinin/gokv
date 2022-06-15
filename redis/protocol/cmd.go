@@ -313,12 +313,12 @@ type CommandInfo struct {
 }
 
 type CommandsInfoCmd struct {
-	Val map[string]CommandInfo
+	Val []CommandInfo
 }
 
 func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
-	var rs = map[string]CommandInfo{
-		"get": {
+	var rs = []CommandInfo{
+		{
 			ReadOnly: true,
 			Name:     "get",
 			Arity:    2,
@@ -334,7 +334,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@fast",
 			},
 		},
-		"ttl": {
+		{
 			ReadOnly: true,
 			Name:     "ttl",
 			Arity:    2,
@@ -352,7 +352,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@fast",
 			},
 		},
-		"keys": {
+		{
 			ReadOnly: true,
 			Name:     "keys",
 			Arity:    2,
@@ -369,7 +369,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@dangerous",
 			},
 		},
-		"scan": {
+		{
 			ReadOnly: true,
 			Name:     "scan",
 			Arity:    -2,
@@ -387,8 +387,8 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 		},
 	}
 
-	var ws = map[string]CommandInfo{
-		"set": {
+	var ws = []CommandInfo{
+		{
 			ReadOnly: false,
 			Name:     "set",
 			Arity:    -3,
@@ -405,7 +405,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"del": {
+		{
 			ReadOnly: false,
 			Name:     "del",
 			Arity:    -2,
@@ -422,7 +422,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"expire": {
+		{
 			ReadOnly: false,
 			Name:     "expire",
 			Arity:    3,
@@ -439,7 +439,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"incr": {
+		{
 			ReadOnly: false,
 			Name:     "incr",
 			Arity:    2,
@@ -457,7 +457,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"incrby": {
+		{
 			ReadOnly: false,
 			Name:     "incrby",
 			Arity:    3,
@@ -475,7 +475,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"decr": {
+		{
 			ReadOnly: false,
 			Name:     "decr",
 			Arity:    2,
@@ -493,7 +493,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 				"@slow",
 			},
 		},
-		"decrby": {
+		{
 			ReadOnly: false,
 			Name:     "decrby",
 			Arity:    2,
@@ -518,9 +518,7 @@ func NewCommandsInfoCmd(isLeader bool) *CommandsInfoCmd {
 			Val: rs,
 		}
 	}
-	for k, v := range rs {
-		ws[k] = v
-	}
+	ws = append(ws, rs...)
 	return &CommandsInfoCmd{
 		Val: ws,
 	}
