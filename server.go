@@ -344,7 +344,7 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 		n.kv.SubmitAsync(submits...)
 		return cmd.Write(client.wr)
 	case "command":
-		cmd := protocol.NewCommandsInfoCmd(n.kv.rs.IsLeader(n.kv.nodeID))
+		cmd := protocol.NewCommandsInfoCmd(n.kv.leader == n.kv.nodeID)
 		return cmd.Write(client.wr)
 	case "sentinel":
 		cmd := protocol.NewSentinelCmd(args)
