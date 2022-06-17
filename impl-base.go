@@ -2,6 +2,7 @@ package gokv
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yixinin/gokv/codec"
 	"github.com/yixinin/gokv/kverror"
@@ -70,6 +71,23 @@ func (s *_baseImpl) Delete(ctx context.Context, cmd *protocol.BaseCmd) *Submit {
 
 func (s *_baseImpl) Keys(ctx context.Context, cmd *protocol.KeysCmd) []*Submit {
 	var exdels = make([]*Submit, 0, 8)
+	if len(cmd.Key) > 0 {
+		data, err := s.kv.Get(ctx, cmd.Key)
+		if err != nil {
+			if errors.Is(err, kverror.ErrNotFound) {
+				return nil
+			}
+			cmd.Err = err
+			return nil
+		}
+		v := codec.Decode(data)
+		if v.Expired(cmd.Now) {
+			exdels = append(exdels, NewExDelSubmit(cmd.Key))
+			return exdels
+		}
+		cmd.Keys = append(cmd.Keys, cmd.Key)
+		return nil
+	}
 	s.kv.Scan(ctx, func(key, data []byte) {
 		if codec.Decode(data).Expired(cmd.Now) {
 			exdels = append(exdels, NewExDelSubmit(key))
@@ -86,6 +104,25 @@ func (s *_baseImpl) Scan(ctx context.Context, cmd *protocol.ScanCmd) []*Submit {
 		limit = int(cmd.Limit)
 	}
 	var exdels = make([]*Submit, 0, limit)
+
+	if len(cmd.Key) > 0 {
+		data, err := s.kv.Get(ctx, cmd.Key)
+		if err != nil {
+			if errors.Is(err, kverror.ErrNotFound) {
+				return nil
+			}
+			cmd.Err = err
+			return nil
+		}
+		v := codec.Decode(data)
+		if v.Expired(cmd.Now) {
+			exdels = append(exdels, NewExDelSubmit(cmd.Key))
+			return exdels
+		}
+		cmd.Keys = append(cmd.Keys, cmd.Key)
+		return nil
+	}
+
 	cmd.Cursor = s.kv.Scan(ctx, func(key, data []byte) {
 		if codec.Decode(data).Expired(cmd.Now) {
 			exdels = append(exdels, NewExDelSubmit(key))

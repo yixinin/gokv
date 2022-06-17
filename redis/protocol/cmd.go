@@ -626,6 +626,7 @@ func (c *PingCommand) Write(w *Writer) error {
 type KeysCmd struct {
 	*BaseCmd
 	Prefix []byte
+	Key    []byte
 
 	Keys [][]byte
 }
@@ -648,10 +649,9 @@ func NewKeysCmd(base *BaseCmd) *KeysCmd {
 			}
 		}
 		if cmd.Prefix[size-1] != '*' {
-			cmd.Err = kverror.ErrCommandArgs
-			return cmd
+			cmd.Key = cmd.Prefix
+			cmd.Prefix = nil
 		}
-		cmd.Prefix = cmd.Prefix[:size-1]
 	}
 
 	return cmd
@@ -667,6 +667,7 @@ func (c *KeysCmd) Write(w *Writer) error {
 type ScanCmd struct {
 	*BaseCmd
 	Prefix []byte
+	Key    []byte
 	Limit  uint64
 	Cursor uint64
 	Keys   [][]byte
@@ -701,10 +702,9 @@ func NewScanCmd(base *BaseCmd) *ScanCmd {
 					}
 				}
 				if cmd.Prefix[size-1] != '*' {
-					cmd.Err = kverror.ErrCommandArgs
-					return cmd
+					cmd.Key = cmd.Prefix
+					cmd.Prefix = nil
 				}
-				cmd.Prefix = cmd.Prefix[:size-1]
 			case "count":
 				i++
 				cmd.Limit, _ = codec.StringBytes2Uint64(base.args[i])
