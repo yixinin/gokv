@@ -15,9 +15,9 @@ func TestRedisCli(t *testing.T) {
 	c := redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName: "xx",
 		SentinelAddrs: []string{
-			"localhost:9001",
+			"localhost:9009",
 			"localhost:9002",
-			"localhost:9003",
+			"localhost:9007",
 		},
 	})
 

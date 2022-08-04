@@ -261,7 +261,7 @@ func (s *RaftKv) apply(ctx context.Context, cmd *Submit, index uint64) error {
 
 // ApplyMemberChange implement raft.StateMachine
 func (s *RaftKv) ApplyMemberChange(confChange *proto.ConfChange, index uint64) (interface{}, error) {
-	return nil, errors.New("not supported")
+	return nil, nil
 }
 
 // Snapshot implement raft.StateMachine

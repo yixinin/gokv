@@ -353,8 +353,19 @@ func (n *Server) handleCmd(ctx context.Context, addr net.Addr, args []interface{
 			cmd.MasterAddr[0] = leader.Host
 			cmd.MasterAddr[1] = fmt.Sprint(leader.HTTPPort)
 		}
+
+		ids := make(map[uint64]bool, len(n.kv.cfg.ClusterCfg.Nodes))
+		ids[n.kv.nodeID] = true
+		if leader.NodeID != n.kv.nodeID {
+			return cmd.Write(client.wr)
+		}
+		for id, v := range n.kv.rs.Status(DefaultClusterID).Replicas {
+			if v.Active {
+				ids[id] = true
+			}
+		}
 		for i, node := range n.kv.cfg.ClusterCfg.Nodes {
-			if node == leader {
+			if node == leader || !ids[node.NodeID] {
 				continue
 			}
 			var s = make([]string, 0, 4)
