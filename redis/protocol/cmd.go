@@ -689,22 +689,23 @@ func NewScanCmd(base *BaseCmd) *ScanCmd {
 			switch strings.ToLower(codec.BytesToString(base.args[i])) {
 			case "match":
 				i++
-				cmd.Prefix = base.args[i]
-				size := len(cmd.Prefix)
+				size := len(base.args[i])
 				if size == 0 {
 					cmd.Err = kverror.ErrCommandArgs
 					return cmd
 				}
-				for i, v := range cmd.Prefix {
+				for i, v := range base.args[i] {
 					if v == '*' && i != size-1 {
 						cmd.Err = kverror.ErrCommandArgs
 						return cmd
 					}
 				}
-				if cmd.Prefix[size-1] != '*' {
-					cmd.Key = cmd.Prefix
+				if base.args[i][size-1] != '*' {
+					cmd.Key = base.args[i]
 					cmd.Prefix = nil
+					return cmd
 				}
+				cmd.Prefix = base.args[i][:size-1]
 			case "count":
 				i++
 				cmd.Limit, _ = codec.StringBytes2Uint64(base.args[i])
