@@ -636,22 +636,23 @@ func NewKeysCmd(base *BaseCmd) *KeysCmd {
 		BaseCmd: base,
 	}
 	if len(base.args) >= 2 {
-		cmd.Prefix = base.args[1]
-		size := len(cmd.Prefix)
+		prefix := base.args[1]
+		size := len(prefix)
 		if size == 0 {
 			cmd.Err = kverror.ErrCommandArgs
 			return cmd
 		}
-		for i, v := range cmd.Prefix {
+		for i, v := range prefix {
 			if v == '*' && i != size-1 {
 				cmd.Err = kverror.ErrCommandArgs
 				return cmd
 			}
 		}
-		if cmd.Prefix[size-1] != '*' {
-			cmd.Key = cmd.Prefix
-			cmd.Prefix = nil
+		if prefix[size-1] != '*' {
+			cmd.Key = prefix
+			return cmd
 		}
+		cmd.Prefix = prefix[:size-1]
 	}
 
 	return cmd
